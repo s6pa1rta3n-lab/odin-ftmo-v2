@@ -1,0 +1,16 @@
+[Unit]
+Description=FTMO Omni Breakout Engine (Config-Driven v2)
+After=network.target
+
+[Service]
+Type=simple
+User=solveetcoagula
+WorkingDirectory=/home/solveetcoagula/odin_ftmo
+ExecStart=/usr/bin/python3 /home/solveetcoagula/odin_ftmo/omni_breakout_engine.py --profile /home/solveetcoagula/odin_ftmo/profiles/omni_winner.json
+Restart=always
+RestartSec=5
+StandardOutput=append:/home/solveetcoagula/odin_ftmo/omni_breakout.log
+StandardError=append:/home/solveetcoagula/odin_ftmo/omni_breakout.log
+
+[Install]
+WantedBy=multi-user.target

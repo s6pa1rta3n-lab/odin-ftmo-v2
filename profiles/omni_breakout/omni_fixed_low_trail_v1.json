@@ -1,0 +1,33 @@
+{
+  "profile_id": "omni_breakout|fixed_low|stop_order_at_range|risk_free_runner|atr_dynamic_trail|spread_gate+day_of_week|US100.cash",
+  "engine": "omni_breakout",
+  "instrument": "US100.cash",
+  "version": "1.0.0",
+  "dimensions": {
+    "risk_model": "fixed_low",
+    "entry_mode": "stop_order_at_range",
+    "pyramid_model": "risk_free_runner",
+    "exit_model": "atr_dynamic_trail",
+    "filters": [
+      "spread_gate",
+      "day_of_week"
+    ]
+  },
+  "parameters": {
+    "sl_pts": 40.0,
+    "tp_pts": 60.0,
+    "buffer_pts": 0.0,
+    "trail_trigger_pts": 25.0,
+    "trail_dist_pts": 20.0,
+    "max_spread_pts": 3.0,
+    "max_tranches": 2,
+    "cooldown_seconds": 60.0,
+    "base_lot_size": 4.0
+  },
+  "risk_bounds": {
+    "max_risk_pct": 0.005,
+    "max_daily_loss_pct": 0.045,
+    "account_floor": 90000.0,
+    "max_lot_size": 10.0
+  }
+}

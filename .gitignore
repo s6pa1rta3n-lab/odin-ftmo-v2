@@ -1,0 +1,15 @@
+__pycache__/
+*.pyc
+*.pyo
+.env
+*.log
+config_us100.json
+data/raw/
+data/processed/
+.agents/
+node_modules/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+_build/

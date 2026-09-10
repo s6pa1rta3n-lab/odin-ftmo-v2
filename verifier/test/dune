@@ -1,0 +1,4 @@
+(test
+ (name test_verifier)
+ (modules test_verifier)
+ (libraries odin_verifier unix str))

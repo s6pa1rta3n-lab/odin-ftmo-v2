@@ -1,0 +1,238 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "OdinFTMOProfileSchema",
+  "description": "Validation schema for Odin FTMO v2 trading strategy profiles across 5 design dimensions.",
+  "type": "object",
+  "required": [
+    "profile_id",
+    "engine",
+    "instrument",
+    "version",
+    "dimensions",
+    "parameters",
+    "risk_bounds"
+  ],
+  "properties": {
+    "profile_id": {
+      "type": "string",
+      "description": "Unique profile identifier in pipe-delimited format: engine|risk|entry|pyramid|exit|filters|instrument"
+    },
+    "engine": {
+      "type": "string",
+      "enum": [
+        "london_reversal",
+        "omni_breakout"
+      ]
+    },
+    "instrument": {
+      "type": "string",
+      "enum": [
+        "US100.cash",
+        "US30.cash",
+        "US500.cash",
+        "GER40.cash",
+        "UK100.cash",
+        "JPN225.cash",
+        "FRA40.cash",
+        "AUS200.cash",
+        "EU50.cash",
+        "EURUSD",
+        "GBPUSD",
+        "USDJPY",
+        "AUDUSD",
+        "USDCAD",
+        "USDCHF",
+        "NZDUSD",
+        "EURGBP",
+        "EURJPY",
+        "GBPJPY",
+        "XAUUSD",
+        "XAGUSD",
+        "BTCUSD",
+        "ETHUSD"
+      ]
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+    },
+    "dimensions": {
+      "type": "object",
+      "required": [
+        "risk_model",
+        "entry_mode",
+        "pyramid_model",
+        "exit_model",
+        "filters"
+      ],
+      "properties": {
+        "risk_model": {
+          "type": "string",
+          "enum": [
+            "conservative_ramp",
+            "fixed_low",
+            "aggressive_flat",
+            "kelly_criterion",
+            "anti_martingale",
+            "volatility_scaled",
+            "equity_curve"
+          ]
+        },
+        "entry_mode": {
+          "type": "string",
+          "enum": [
+            "blind_limit",
+            "sweep_confirmation",
+            "dynamic_buffer",
+            "time_weighted",
+            "order_flow_spread_gate",
+            "multi_timeframe",
+            "hybrid_sweep_time_spread",
+            "stop_order_at_range",
+            "close_confirmation",
+            "volume_spike_gate",
+            "retest_entry",
+            "momentum_threshold",
+            "dual_timeframe",
+            "hybrid_retest_volume_spread"
+          ]
+        },
+        "pyramid_model": {
+          "type": "string",
+          "enum": [
+            "no_pyramid",
+            "equal_split",
+            "front_loaded",
+            "inverse_pyramid",
+            "momentum_confirmed",
+            "risk_free_runner",
+            "adaptive_tranche"
+          ]
+        },
+        "exit_model": {
+          "type": "string",
+          "enum": [
+            "fixed_sl_tp",
+            "fixed_sl_trail",
+            "atr_dynamic_trail",
+            "breakeven_runner",
+            "time_based",
+            "chandelier",
+            "multi_target_cascade"
+          ]
+        },
+        "filters": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "atr_gate",
+              "vix_regime",
+              "spread_gate",
+              "news_blackout",
+              "pre_session_momentum",
+              "volatility_percentile",
+              "day_of_week",
+              "orb_width_gate",
+              "pre_open_trend",
+              "london_session_result"
+            ]
+          },
+          "uniqueItems": true
+        }
+      },
+      "additionalProperties": false
+    },
+    "parameters": {
+      "type": "object",
+      "required": [
+        "sl_pts",
+        "tp_pts",
+        "max_spread_pts",
+        "max_tranches",
+        "cooldown_seconds"
+      ],
+      "properties": {
+        "sl_pts": {
+          "type": "number",
+          "minimum": 5.0,
+          "maximum": 500.0
+        },
+        "tp_pts": {
+          "type": "number",
+          "minimum": 5.0,
+          "maximum": 1000.0
+        },
+        "buffer_pts": {
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 100.0
+        },
+        "trail_trigger_pts": {
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 200.0
+        },
+        "trail_dist_pts": {
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 200.0
+        },
+        "max_spread_pts": {
+          "type": "number",
+          "minimum": 0.1,
+          "maximum": 50.0
+        },
+        "max_tranches": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4
+        },
+        "cooldown_seconds": {
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 3600.0
+        },
+        "base_lot_size": {
+          "type": "number",
+          "minimum": 0.01,
+          "maximum": 50.0
+        }
+      },
+      "additionalProperties": true
+    },
+    "risk_bounds": {
+      "type": "object",
+      "required": [
+        "max_risk_pct",
+        "max_daily_loss_pct",
+        "account_floor",
+        "max_lot_size"
+      ],
+      "properties": {
+        "max_risk_pct": {
+          "type": "number",
+          "minimum": 0.001,
+          "maximum": 0.015
+        },
+        "max_daily_loss_pct": {
+          "type": "number",
+          "minimum": 0.01,
+          "maximum": 0.045
+        },
+        "account_floor": {
+          "type": "number",
+          "minimum": 90000.0,
+          "maximum": 100000.0
+        },
+        "max_lot_size": {
+          "type": "number",
+          "minimum": 0.01,
+          "maximum": 50.0
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

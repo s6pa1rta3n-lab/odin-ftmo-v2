@@ -1,0 +1,10 @@
+(library
+ (name odin_verifier)
+ (wrapped false)
+ (modules types json ftmo_specs model_checker)
+ (libraries unix str))
+
+(executable
+ (name verifier)
+ (modules verifier)
+ (libraries odin_verifier unix str))

@@ -1,0 +1,33 @@
+{
+  "profile_id": "london_reversal|fixed_low|dynamic_buffer|front_loaded|breakeven_runner|atr_gate+day_of_week|US100.cash",
+  "engine": "london_reversal",
+  "instrument": "US100.cash",
+  "version": "1.0.0",
+  "dimensions": {
+    "risk_model": "fixed_low",
+    "entry_mode": "dynamic_buffer",
+    "pyramid_model": "front_loaded",
+    "exit_model": "breakeven_runner",
+    "filters": [
+      "atr_gate",
+      "day_of_week"
+    ]
+  },
+  "parameters": {
+    "sl_pts": 40.0,
+    "tp_pts": 40.0,
+    "buffer_pts": 5.0,
+    "trail_trigger_pts": 20.0,
+    "trail_dist_pts": 15.0,
+    "max_spread_pts": 2.5,
+    "max_tranches": 3,
+    "cooldown_seconds": 120.0,
+    "base_lot_size": 4.0
+  },
+  "risk_bounds": {
+    "max_risk_pct": 0.005,
+    "max_daily_loss_pct": 0.045,
+    "account_floor": 90000.0,
+    "max_lot_size": 10.0
+  }
+}

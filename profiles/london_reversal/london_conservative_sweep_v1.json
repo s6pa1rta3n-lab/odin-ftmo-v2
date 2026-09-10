@@ -1,0 +1,33 @@
+{
+  "profile_id": "london_reversal|conservative_ramp|sweep_confirmation|no_pyramid|fixed_sl_trail|atr_gate+spread_gate|US100.cash",
+  "engine": "london_reversal",
+  "instrument": "US100.cash",
+  "version": "1.0.0",
+  "dimensions": {
+    "risk_model": "conservative_ramp",
+    "entry_mode": "sweep_confirmation",
+    "pyramid_model": "no_pyramid",
+    "exit_model": "fixed_sl_trail",
+    "filters": [
+      "atr_gate",
+      "spread_gate"
+    ]
+  },
+  "parameters": {
+    "sl_pts": 40.0,
+    "tp_pts": 20.0,
+    "buffer_pts": 0.0,
+    "trail_trigger_pts": 15.0,
+    "trail_dist_pts": 15.0,
+    "max_spread_pts": 3.0,
+    "max_tranches": 1,
+    "cooldown_seconds": 60.0,
+    "base_lot_size": 5.0
+  },
+  "risk_bounds": {
+    "max_risk_pct": 0.0075,
+    "max_daily_loss_pct": 0.045,
+    "account_floor": 90000.0,
+    "max_lot_size": 15.0
+  }
+}

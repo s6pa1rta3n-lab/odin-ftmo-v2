@@ -1,0 +1,16 @@
+[Unit]
+Description=FTMO London Range Reversal Engine (Config-Driven v2)
+After=network.target
+
+[Service]
+Type=simple
+User=solveetcoagula
+WorkingDirectory=/home/solveetcoagula/odin_ftmo
+ExecStart=/usr/bin/python3 /home/solveetcoagula/odin_ftmo/london_reversal_engine_live.py --profile /home/solveetcoagula/odin_ftmo/profiles/london_winner.json
+Restart=always
+RestartSec=10
+StandardOutput=append:/home/solveetcoagula/odin_ftmo/london_reversal.log
+StandardError=append:/home/solveetcoagula/odin_ftmo/london_reversal.log
+
+[Install]
+WantedBy=multi-user.target
