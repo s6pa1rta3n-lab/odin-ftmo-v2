@@ -370,6 +370,7 @@ class GriffLiveEngine:
         """Initialize live engine configuration and state attributes."""
         self.token = token
         self.account_id = account_id
+        self.symbol = symbol
         if self.symbol == "US100.cash":
             self.risk_pct = 0.0065
         elif self.symbol == "BTCUSD":
