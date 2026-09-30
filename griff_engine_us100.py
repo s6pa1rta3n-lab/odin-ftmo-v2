@@ -86,7 +86,7 @@ class US100Engine:
             if not self.wrapper.connection: return []
             
             # 15m is '15m' in MetaAPI
-            candles = await self.wrapper.account.get_historical_candles(mt5_sym, '15m', startTime=None, limit=50)
+            candles = await self.wrapper.account.get_historical_candles(mt5_sym, '15m')
             formatted = []
             for c in candles:
                 formatted.append({
