@@ -30,9 +30,9 @@ logging.basicConfig(
 logger = logging.getLogger("US100_Engine")
 
 class US100Engine:
-    def __init__(self, config_path: str = "config_us100.json"):
+    def __init__(self, token, account_id, config_path: str = "config_us100.json"):
         self.config_path = config_path
-        self.wrapper = MetaApiWrapper()
+        self.wrapper = MetaApiWrapper(token, account_id)
         self.is_running = False
         self.state = "SEARCHING"
         self.active_position = None
@@ -211,15 +211,35 @@ class US100Engine:
                 
             await asyncio.sleep(15.0)
 
+
+import argparse
+import json
+
+def load_metaapi_token(config_path="config_us100.json"):
+    with open(config_path, "r") as f:
+        cfg = json.load(f)
+    return cfg.get("metaapi", {}).get("token", "")
+
 if __name__ == "__main__":
-    engine = US100Engine()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--account-id", required=True)
+    parser.add_argument("--config", default="config_us100.json")
+    args = parser.parse_args()
     
-    def handle_sigint(sig, frame):
-        logger.info("Received termination signal.")
-        engine.is_running = False
-        sys.exit(0)
+    token = load_metaapi_token(args.config)
+    
+    async def main():
+        engine = US100Engine(token=token, account_id=args.account_id)
         
-    signal.signal(signal.SIGINT, handle_sigint)
-    signal.signal(signal.SIGTERM, handle_sigint)
-    
-    asyncio.run(engine.run_loop())
+        def handle_sigint(sig, frame):
+            logger.info("Received termination signal.")
+            engine.is_running = False
+            import sys
+            sys.exit(0)
+            
+        signal.signal(signal.SIGINT, handle_sigint)
+        signal.signal(signal.SIGTERM, handle_sigint)
+        
+        await engine.run_loop()
+
+    asyncio.run(main())
