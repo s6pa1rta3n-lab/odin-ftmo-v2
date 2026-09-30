@@ -181,3 +181,165 @@ Deployment target: systemd services on the `matt-berserker` VM.
 ## Follow-up — 2026-09-09T19:15:34Z
 
 Updated requirement from the user: Paper trading (R5) must run for a minimum of **72 hours (3 days)**, not 48 hours as originally specified. This applies to both London Reversal and Omni Breakout top 10 profiles. Do NOT deploy any winning profile to live trading until it has completed at least 72 hours of paper trading with passing metrics. Relay this constraint to the orchestrator and any M5 workers.
+
+## Follow-up — 2026-09-15T14:38:58Z
+
+# Teamwork Project Prompt — Draft
+
+> Status: Ready for launch — awaiting user approval
+> Goal: Craft prompt → get user approval → delegate to teamwork_preview
+> Requested team: [none — teamwork routes from the description]
+
+Investigate and definitively solve the "ghost exit" bug on the Odin FTMO v2 trading system. A LONG position on US100.cash was automatically closed exactly 11 seconds after entry via an API market order, but the active Python trading engines did not log any closing action and the user did not manually close it. The team must find the true root cause of this execution and provide a proven resolution.
+
+Working directory: /Users/solveetcoagula/Desktop/google_cloud
+Integrity mode: benchmark
+
+## Requirements
+
+### R1. Forensic Root Cause Analysis
+Determine exactly what process, script, or cloud mechanism issued the `DEAL_ENTRY_OUT` market order with `ORDER_REASON_EXPERT` at 07:57:15 UTC. Analyze the local mirrored codebase (`MetaApiWrapper.py`, `london_reversal_engine_live.py`, `omni_breakout_engine.py`) and use `gcloud compute ssh` to inspect the VM (`matt-berserker`).
+
+### R2. State Leakage & Concurrency Check
+Investigate if there is any state leakage between the Omni Breakout Engine and the London Reversal Engine. Specifically, check if the Omni engine (or any other background process) read the London engine's position and executed a hidden exit, trailing stop, or flatten command that bypassed standard logging.
+
+### R3. Implement Resolution
+Once the root cause is mathematically proven, implement the code fix in the trading engines to strictly isolate state by `client_id` or fix the offending logic to prevent cross-talk and unauthorized exits.
+
+## Acceptance Criteria
+
+### Root Cause Verification
+- [ ] The root cause explicitly explains how the `positionId` and `comment` string were perfectly carried over to the exit order.
+- [ ] The root cause explicitly explains why the Python engines did not output any `PLACING MARKET` or `FLATTENING` logs during the exact second of the exit.
+
+### Fix Verification
+- [ ] The engines are refactored to strictly isolate their state management so they never read or modify each other's active trades.
+- [ ] Mandatory build process documentation is updated on the GitHub tracking issue (#1) detailing the bug and resolution.
+
+## Follow-up — 2026-09-16T14:58:09Z
+
+# Teamwork Project Prompt — Draft
+
+> Status: Ready for launch — awaiting user approval.
+> Goal: Craft prompt → get user approval → delegate to teamwork_preview
+> Requested team: Small, focused team
+
+This is a single self-contained fix; keep it small and focused. Fix the MetaApi WebSocket connection stability issues in the `omni_breakout_engine.py` trading script. The script currently suffers from `TimeoutError` and "account is not connected to broker yet" errors that drop the streaming connection and force it into a degraded REST fallback mode.
+
+Working directory: /Users/solveetcoagula/Desktop/google_cloud
+Integrity mode: benchmark
+
+## Requirements
+
+### R1. MetaApi Connection Hardening
+Analyze the MT5 connection lifecycle in `omni_breakout_engine.py`. The `MetaApiWrapper` is currently experiencing `TimeoutError` on the streaming subscription and falling back to REST mode because the WebSocket upgrade drops or the region settings are mismatched.
+
+### R2. Reconnection & Config Fix
+Implement robust reconnection logic, proper `waitSynchronized` handling, and verify/fix the MetaApi region or SDK settings if they are misconfigured for the FTMO broker (the log explicitly mentions SDK region option warnings).
+
+### R3. Deployment & Parity
+Deploy the patched engine to the remote VM (`matt-berserker`), restart the `ftmo_hft_omni.service`, and ensure 100% SHA256 parity between the local repository and the VM.
+
+## Acceptance Criteria
+
+### Execution & Telemetry
+- [ ] `tail -n 100 /home/solveetcoagula/odin_ftmo/omni_breakout.log` on the VM shows `WebSocket upgrade was successful`.
+- [ ] The log shows a continuous stream of live `synchronization` price ticks.
+- [ ] The log contains absolutely zero `TimeoutError`, `processingError`, or REST fallback warnings.
+
+### Parity
+- [ ] The SHA256 checksum of the local `omni_breakout_engine.py` perfectly matches the checksum of the remote VM file.
+
+---
+*Next: when approved → delegate via invoke_subagent (see Delegation Protocol)*
+
+## Follow-up — 2026-09-16T20:42:57Z
+
+# Teamwork Project Prompt — Draft
+
+> Status: Launched
+> Goal: Craft prompt → get user approval → delegate to teamwork_preview
+> Requested team: [none — teamwork routes from the description]
+
+Build a new automated trading engine based on "Griff's" strategy (1-hour time frame, no indicators, price-action inside bar breakout, ATR-based position sizing and trailing stops) to trade on a deployed 100k free trial FTMO account via MetaAPI (ID: `45a2565b-4f53-4bd5-8c58-667b3660430f`). Ensure existing 'omni_breakout' and 'london' engines (and their cron jobs) on the VM are permanently disabled, avoid previous deployment issues, and enforce mandatory GitHub build process documentation.
+
+Working directory: /Users/solveetcoagula/Desktop/google_cloud
+Integrity mode: development
+
+## Requirements
+
+### R1. Remote Cleanup
+SSH into the `matt-berserker` VM and permanently disable the `ftmo_hft_omni` and london-related systemd services, plus any associated cron jobs.
+
+### R2. Live Engine Implementation & Execution
+Build `griff_engine_live.py` utilizing Griff's 1-hour inside-bar, ATR-sized breakout strategy (14-period ATR). Position sizing must strictly risk 1% of the current account equity. The team must start the engine and verify it successfully executes live trades on the provided FTMO account.
+
+### R3. Infrastructure, Credentials & Resilience
+Utilize the newly hardened, fault-tolerant `MetaApiWrapper.py` (which includes RPC/REST timeout fallbacks) to connect to MetaAPI (ID: `45a2565b-4f53-4bd5-8c58-667b3660430f`). 
+If MetaAPI syncing or verification is required, use these credentials:
+- Login: `1514655871`
+- Master Password: `B4w63?c*3H!e`
+- Server: `FTMO-Demo`
+This is required to prevent disconnection errors. All `gcloud` commands must be prefixed with `CLOUDSDK_METRICS_ENVIRONMENT=datacloud.antigravity`.
+
+### R4. Mandatory Build Documentation
+Strictly follow the `mandatory-build-process-documentation` skill. Initialize a GitHub repo under `s6pa1rta3n-lab` and document all deployment blockers, fixes, and design decisions as real-time sub-issues.
+
+## Acceptance Criteria
+
+### VM Cleanup
+- [ ] `systemctl is-active` returns `inactive` for both the omni and london engines on `matt-berserker`.
+- [ ] `systemctl is-enabled` returns `disabled` for both services.
+
+### Engine Execution & Live Verification
+- [ ] `griff_engine_live.py` successfully connects to MetaAPI (ID: `45a2565b-4f53-4bd5-8c58-667b3660430f`).
+- [ ] The engine logs the correct starting FTMO balance (~$100,000) on startup without raising a `TimeoutException`.
+- [ ] The engine parses the 1H timeframe correctly and calculates position sizes strictly at 1% risk based on the 14-period ATR.
+- [ ] A live trade is successfully routed, executed, and confirmed on the FTMO Demo account by the engine.
+
+### Documentation
+- [ ] A new GitHub repository is created under `s6pa1rta3n-lab` with a parent tracking issue.
+- [ ] At least one sub-issue (documenting the VM cleanup or a design decision) is correctly linked to the parent tracking issue via `sub_issue_write` using the `id` field.
+
+
+## 2026-09-21T02:22:25Z
+
+# Teamwork Project Prompt — Draft
+
+> Status: Launched
+> Requested team: The full multi-agent teamwork swarm
+
+Investigate and determine the objective root cause of persistent MetaAPI websocket 503 connection errors, request timeouts, and historical candle fetch failures occurring on the GCP VM `matt-berserker` running the Griff Trading Engine. The investigation must be purely empirical with no prior assumptions.
+
+Working directory: `~/teamwork_projects/metaapi_503_rca`
+Integrity mode: development
+
+## Requirements
+
+### R1. Analyze System Logs
+Gather and analyze raw system logs (`journalctl`), process metrics, and network traffic from `matt-berserker` (zone: us-central1-a, project: project-45c3b27c-b597-4704-a50) to identify the exact onset, frequency, and pattern of the 503 errors across both `griff_engine` and `griff_engine_btc` services. ALWAYS prefix gcloud commands with `CLOUDSDK_METRICS_ENVIRONMENT=datacloud.antigravity`.
+
+### R2. Determine Locus of Failure
+Determine conclusively whether the root cause originates from the client side (e.g., rate limiting, aggressive polling, local network configuration, IP blocking) or the server side (e.g., MetaAPI London server outage, broker disconnection). 
+
+### R3. Active Diagnostics Permitted
+You may write and run active network diagnostic scripts (e.g., `ping`, `curl`, `tcpdump`) on the VM. You may also temporarily modify the trading engine source code to add verbose debug logging if necessary, provided you revert any changes after the investigation.
+
+### R4. Formal RCA Deliverable
+Produce a formal Root Cause Analysis (RCA) document containing detailed evidence, log timelines, diagnostic outputs, and actionable remediation steps.
+
+### R5. Mandatory GitHub Documentation
+You MUST strictly follow the `mandatory-build-process-documentation` protocol. Document every blocker, unexpected error, failed approach, diagnostic discovery, and significant decision encountered during the investigation as a GitHub sub-issue in real-time under the `s6pa1rta3n-lab` organization tracking issue. 
+
+## Acceptance Criteria
+
+### Verification Rubric (Agent-as-Judge)
+- [ ] An independent reviewer agent can confirm the RCA document contains concrete timestamped log evidence from the VM rather than speculative theories.
+- [ ] An independent reviewer agent can confirm the RCA explicitly rules out at least two alternative hypotheses using empirical evidence (e.g., ruling out local network failure via external ping tests).
+- [ ] The RCA document includes the exact HTTP/WebSocket response headers or TCP connection states captured during a failure event.
+- [ ] Any temporary code modifications made for debugging have been successfully reverted, leaving the trading engine in its original state.
+- [ ] An independent reviewer agent can confirm that diagnostic steps, errors, and blockers were successfully logged to GitHub issues using the `issue_write` and `sub_issue_write` tools in real-time.
+
+## 2026-09-21T02:57:53Z
+
+USER INSTRUCTION: The priority is to make sure that we never miss a trading opportunity. Hiding problems (like suppressing 503 logs) won't be helpful if it masks a failure that causes us to miss a trade. Please ensure the RCA remediation prioritizes absolute reliability, potentially recommending a full shard migration (e.g. new-york or singapore) rather than just silencing the logs.

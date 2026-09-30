@@ -20,6 +20,12 @@ try:
 except ImportError:
     MetaApiWrapper = None
 
+try:
+    from metaapi_cloud_sdk.clients.timeout_exception import TimeoutException
+except ImportError:
+    class TimeoutException(Exception):
+        pass
+
 from modules.entry import evaluate_omni_entry
 from modules.exit import ExitManager, ExitModel
 from modules.filters import FilterEngine
@@ -30,7 +36,7 @@ logging.basicConfig(
     level=logging.INFO,
     format="[%(asctime)s] %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
-    handlers=[logging.StreamHandler(), logging.FileHandler("omni_breakout.log")],
+    handlers=[logging.StreamHandler()],
 )
 log = logging.getLogger("OMNI_BREAKOUT")
 
@@ -44,6 +50,133 @@ def log_info(msg: str) -> None:
 
 
 meta_api_wrapper: Optional[MetaApiWrapper] = None
+
+
+async def fetch_positions_safe(wrapper: Optional[Any]) -> Optional[list]:
+    """Fetch positions with timeout catching, logging, and REST fallback.
+
+    Parameters:
+        wrapper: Active MetaApiWrapper instance.
+
+    Returns:
+        List of MT5 positions or None on failure.
+    """
+    if wrapper is None:
+        return None
+    positions = None
+    try:
+        if hasattr(wrapper, "connection") and wrapper.connection:
+            positions = await asyncio.wait_for(wrapper.connection.get_positions(), timeout=10.0)
+    except TimeoutException as e:
+        log_info(f"MetaApi TimeoutException fetching positions: {e}. Sleeping before REST retry.")
+        await asyncio.sleep(1.0)
+        try:
+            if hasattr(wrapper, "get_positions_rest"):
+                positions = await wrapper.get_positions_rest()
+        except Exception as rest_err:
+            log_info(f"REST get_positions_rest retry failed: {rest_err}")
+    except (asyncio.TimeoutError, Exception) as e:
+        log_info(f"Connection get_positions error ({type(e).__name__}): {e}. Sleeping before REST retry.")
+        await asyncio.sleep(1.0)
+        try:
+            if hasattr(wrapper, "get_positions_rest"):
+                positions = await wrapper.get_positions_rest()
+        except Exception as rest_err:
+            log_info(f"REST get_positions_rest retry failed: {rest_err}")
+
+    if positions is None and hasattr(wrapper, "get_positions_rest"):
+        try:
+            positions = await wrapper.get_positions_rest()
+        except Exception as rest_err:
+            log_info(f"Secondary REST get_positions_rest failed: {rest_err}")
+
+    return positions
+
+
+async def fetch_account_information_safe(wrapper: Optional[Any]) -> Dict[str, Any]:
+    """Fetch account information with timeout protection and REST fallback.
+
+    Parameters:
+        wrapper: Active MetaApiWrapper instance.
+
+    Returns:
+        Dictionary with account information or empty dict on failure.
+    """
+    if wrapper is None:
+        return {}
+    info = None
+    try:
+        if hasattr(wrapper, "get_account_information"):
+            info = await wrapper.get_account_information()
+        elif hasattr(wrapper, "get_account_information_rest"):
+            info = await wrapper.get_account_information_rest()
+        elif hasattr(wrapper, "connection") and wrapper.connection:
+            info = await asyncio.wait_for(wrapper.connection.get_account_information(), timeout=10.0)
+    except TimeoutException as e:
+        log_info(f"MetaApi TimeoutException fetching account info: {e}. Sleeping before REST retry.")
+        await asyncio.sleep(1.0)
+        try:
+            if hasattr(wrapper, "get_account_information_rest"):
+                info = await wrapper.get_account_information_rest()
+        except Exception as rest_err:
+            log_info(f"REST get_account_information_rest retry failed: {rest_err}")
+    except (asyncio.TimeoutError, Exception) as e:
+        log_info(f"Account info fetch error ({type(e).__name__}): {e}. Sleeping before REST retry.")
+        await asyncio.sleep(1.0)
+        try:
+            if hasattr(wrapper, "get_account_information_rest"):
+                info = await wrapper.get_account_information_rest()
+        except Exception as rest_err:
+            log_info(f"REST get_account_information_rest retry failed: {rest_err}")
+
+    if not info and hasattr(wrapper, "get_account_information_rest"):
+        try:
+            info = await wrapper.get_account_information_rest()
+        except Exception as rest_err:
+            log_info(f"Secondary REST get_account_information_rest failed: {rest_err}")
+
+    return info or {}
+
+
+async def fetch_orders_safe(wrapper: Optional[Any]) -> Optional[list]:
+    """Fetch pending orders with timeout protection and REST fallback.
+
+    Parameters:
+        wrapper: Active MetaApiWrapper instance.
+
+    Returns:
+        List of pending orders or None on failure.
+    """
+    if wrapper is None:
+        return None
+    orders = None
+    try:
+        if hasattr(wrapper, "connection") and wrapper.connection:
+            orders = await asyncio.wait_for(wrapper.connection.get_orders(), timeout=10.0)
+    except TimeoutException as e:
+        log_info(f"MetaApi TimeoutException fetching orders: {e}. Sleeping before REST retry.")
+        await asyncio.sleep(1.0)
+        try:
+            if hasattr(wrapper, "get_orders_rest"):
+                orders = await wrapper.get_orders_rest()
+        except Exception as rest_err:
+            log_info(f"REST get_orders_rest retry failed: {rest_err}")
+    except (asyncio.TimeoutError, Exception) as e:
+        log_info(f"Order fetch error ({type(e).__name__}): {e}. Sleeping before REST retry.")
+        await asyncio.sleep(1.0)
+        try:
+            if hasattr(wrapper, "get_orders_rest"):
+                orders = await wrapper.get_orders_rest()
+        except Exception as rest_err:
+            log_info(f"REST get_orders_rest retry failed: {rest_err}")
+
+    if orders is None and hasattr(wrapper, "get_orders_rest"):
+        try:
+            orders = await wrapper.get_orders_rest()
+        except Exception as rest_err:
+            log_info(f"Secondary REST get_orders_rest failed: {rest_err}")
+
+    return orders
 
 
 def get_hive_mind_throttle(hive_key: str) -> str:
@@ -156,21 +289,26 @@ async def execute_close(
     success = False
     try:
         mt5_sym = meta_api_wrapper._to_mt5(symbol)
-        positions = await meta_api_wrapper.connection.get_positions()
+        positions = await fetch_positions_safe(meta_api_wrapper)
         remaining_qty = float(qty)
         if positions is not None:
             for p in positions:
-                p_cid = p.get("comment", p.get("clientId", "POD_0"))
-                if not str(p_cid).startswith("POD_"):
-                    p_cid = "POD_0"
-                if p["symbol"] == mt5_sym and p["type"] == target_type and str(p_cid).startswith(client_id):
+                p_cid = str(p.get("comment") or p.get("clientId") or "")
+                if not p_cid.startswith(client_id):
+                    continue
+                if p["symbol"] == mt5_sym and p["type"] == target_type:
                     vol = float(p.get("volume", 0))
                     if vol <= remaining_qty + 0.02:
-                        await asyncio.wait_for(meta_api_wrapper.connection.close_position(p["id"]), timeout=5.0)
-                        remaining_qty -= vol
-                        success = True
+                        try:
+                            await asyncio.wait_for(meta_api_wrapper.connection.close_position(p["id"]), timeout=5.0)
+                            remaining_qty -= vol
+                            success = True
+                        except TimeoutException as te:
+                            log_info(f"MetaApi TimeoutException closing position {p['id']} for {symbol}: {te}")
                     if remaining_qty <= 0.01:
                         break
+    except TimeoutException as e:
+        log_info(f"MetaApi TimeoutException in execute_close for {symbol}: {e}")
     except Exception as e:
         err_str = str(e)
         if "ERR_TRADE_POSITION_NOT_FOUND" not in err_str and "Position not found" not in err_str:
@@ -284,31 +422,25 @@ async def execute_stop_order(
     return success
 
 
-async def cancel_pending_orders(symbol: str) -> None:
-    """Cancel all pending orders on MT5 for the specified symbol.
+async def cancel_pending_orders(symbol: str, client_prefix: Optional[str] = None) -> None:
+    """Cancel pending orders on MT5 for the specified symbol matching client_prefix.
 
     Parameters:
         symbol: Traded instrument symbol.
+        client_prefix: Optional prefix to filter orders by comment or clientId.
     """
     if meta_api_wrapper is None:
         return
     try:
         mt5_sym = meta_api_wrapper._to_mt5(symbol)
-        orders = None
-        if hasattr(meta_api_wrapper, "connection") and meta_api_wrapper.connection:
-            try:
-                orders = await meta_api_wrapper.connection.get_orders()
-            except Exception:
-                pass
-        if orders is None and hasattr(meta_api_wrapper, "get_orders_rest"):
-            try:
-                orders = await meta_api_wrapper.get_orders_rest()
-            except Exception:
-                pass
+        orders = await fetch_orders_safe(meta_api_wrapper)
 
         if orders is not None:
             for o in orders:
                 if o.get("symbol") == mt5_sym:
+                    o_cid = str(o.get("comment") or o.get("clientId") or "")
+                    if client_prefix is not None and not o_cid.startswith(client_prefix):
+                        continue
                     ord_id = o.get("id")
                     log_info(f"Canceling pending order {ord_id} on {symbol}")
                     try:
@@ -316,14 +448,18 @@ async def cancel_pending_orders(symbol: str) -> None:
                             await asyncio.wait_for(meta_api_wrapper.cancel_order(ord_id), timeout=5.0)
                         elif hasattr(meta_api_wrapper, "connection") and meta_api_wrapper.connection:
                             await asyncio.wait_for(meta_api_wrapper.connection.cancel_order(ord_id), timeout=5.0)
+                    except TimeoutException as te:
+                        log_info(f"MetaApi TimeoutException canceling order {ord_id}: {te}")
                     except Exception as e:
                         log_info(f"Failed to cancel order {ord_id}: {e}")
+    except TimeoutException as e:
+        log_info(f"MetaApi TimeoutException in cancel_pending_orders for {symbol}: {e}")
     except Exception as e:
         log_info(f"Cancel Orders Failed: {e}")
 
 
 def is_eod_window(utc_dt: datetime) -> bool:
-    """Check if timestamp falls into end-of-day liquidation window (>= 19:45 UTC or < 08:05 UTC).
+    """Check if timestamp falls into end-of-day liquidation window (>= 19:45 UTC).
 
     Parameters:
         utc_dt: Datetime in UTC.
@@ -335,7 +471,7 @@ def is_eod_window(utc_dt: datetime) -> bool:
         utc_dt = utc_dt.astimezone(pytz.utc)
     h = utc_dt.hour
     m = utc_dt.minute
-    return (h > 19) or (h == 19 and m >= 45) or (h < 8) or (h == 8 and m < 5)
+    return (h == 19 and m >= 45) or (h >= 20)
 
 
 async def check_and_execute_eod_liquidation(
@@ -363,12 +499,13 @@ async def check_and_execute_eod_liquidation(
             trading_halted = True
 
         for sym in symbols_cfg.keys():
-            await cancel_pending_orders(sym)
+            sym_prefix = states[sym].client_id if sym in states else None
+            await cancel_pending_orders(sym, client_prefix=sym_prefix)
 
         has_open_positions = any(s.side != 0 or s.lots > 0 for s in states.values())
         if has_open_positions or not eod_flattened_logged:
             log_info(f"Executing EOD flattening (open_positions={has_open_positions})...")
-            flat_success = await flatten_all_positions(reason="EOD LIQUIDATION")
+            flat_success = await flatten_all_positions(states, reason="EOD LIQUIDATION")
             if flat_success:
                 eod_flattened_logged = True
                 for s in states.values():
@@ -403,30 +540,35 @@ async def sync_trend_stop_to_broker(
     target_type = "POSITION_TYPE_BUY" if side_str == "LONG" else "POSITION_TYPE_SELL"
     try:
         mt5_sym = meta_api_wrapper._to_mt5(symbol)
-        positions = await meta_api_wrapper.connection.get_positions()
+        positions = await fetch_positions_safe(meta_api_wrapper)
         if positions is not None:
             for p in positions:
-                p_cid = p.get("comment", p.get("clientId", "POD_0"))
-                if not str(p_cid).startswith("POD_"):
-                    p_cid = "POD_0"
-                if p["symbol"] == mt5_sym and p["type"] == target_type and str(p_cid).startswith(client_id):
+                p_cid = str(p.get("comment") or p.get("clientId") or "")
+                if not p_cid.startswith(client_id):
+                    continue
+                if p["symbol"] == mt5_sym and p["type"] == target_type:
                     try:
                         await asyncio.wait_for(
                             meta_api_wrapper.connection.modify_position(p["id"], stop_loss=sl, take_profit=p.get("takeProfit")),
                             timeout=5.0,
                         )
                         log_info(f"SYNCHRONIZED TREND STOP TO BROKER ({symbol}): Position {p['id']} -> SL: {sl}")
+                    except TimeoutException as te:
+                        log_info(f"MetaApi TimeoutException modifying SL for {p['id']} ({symbol}): {te}")
                     except Exception as e:
                         log_info(f"Failed to sync broker SL for {p['id']} ({symbol}): {e}")
+    except TimeoutException as e:
+        log_info(f"MetaApi TimeoutException in sync_trend_stop_to_broker for {symbol}: {e}")
     except Exception as e:
         log_info(f"Sync SL Failed/Timeout for {symbol}: {e}")
     await asyncio.sleep(1)
 
 
-async def flatten_all_positions(reason: str = "CIRCUIT BREAKER") -> bool:
-    """Close all open positions on the account.
+async def flatten_all_positions(client_prefix: Any = "POD_", reason: str = "CIRCUIT BREAKER") -> bool:
+    """Close all open positions on the account for managed strategies.
 
     Parameters:
+        client_prefix: Strategy prefix, BreakoutState, or states dict.
         reason: Cause for liquidation.
 
     Returns:
@@ -434,23 +576,33 @@ async def flatten_all_positions(reason: str = "CIRCUIT BREAKER") -> bool:
     """
     if meta_api_wrapper is None:
         return False
-    log_info(f"FLATTENING ALL POSITIONS! REASON: {reason}")
+
+    if isinstance(client_prefix, dict):
+        valid_prefixes = [getattr(s, "client_id", str(s)) for s in client_prefix.values()]
+    elif isinstance(client_prefix, (list, set, tuple)):
+        valid_prefixes = [getattr(s, "client_id", str(s)) for s in client_prefix]
+    elif hasattr(client_prefix, "client_id"):
+        valid_prefixes = [client_prefix.client_id]
+    elif isinstance(client_prefix, str):
+        if reason == "CIRCUIT BREAKER" and (client_prefix.startswith("EOD") or client_prefix.startswith("CIRCUIT")):
+            reason = client_prefix
+            valid_prefixes = ["POD_"]
+        else:
+            valid_prefixes = [client_prefix]
+    else:
+        valid_prefixes = ["POD_"]
+
+    log_info(f"FLATTENING POSITIONS FOR {valid_prefixes}! REASON: {reason}")
     all_closed = True
     try:
-        positions = None
-        if hasattr(meta_api_wrapper, "connection") and meta_api_wrapper.connection:
-            try:
-                positions = await meta_api_wrapper.connection.get_positions()
-            except Exception as e:
-                log_info(f"Connection get_positions failed during flatten: {e}")
-        if positions is None and hasattr(meta_api_wrapper, "get_positions_rest"):
-            try:
-                positions = await meta_api_wrapper.get_positions_rest()
-            except Exception as e:
-                log_info(f"REST get_positions failed during flatten: {e}")
+        positions = await fetch_positions_safe(meta_api_wrapper)
 
         if positions is not None:
             for p in positions:
+                p_cid = str(p.get("comment") or p.get("clientId") or "")
+                is_managed = any(p_cid.startswith(prefix) for prefix in valid_prefixes)
+                if not is_managed:
+                    continue
                 pos_id = p.get("id")
                 try:
                     if hasattr(meta_api_wrapper, "connection") and meta_api_wrapper.connection:
@@ -462,9 +614,15 @@ async def flatten_all_positions(reason: str = "CIRCUIT BREAKER") -> bool:
                         payload = {"symbol": p.get("symbol"), "side": side, "type": "MARKET", "quantity": str(qty)}
                         await asyncio.wait_for(meta_api_wrapper.route_order(payload), timeout=5.0)
                         log_info(f"Flattened position {pos_id} via route_order")
+                except TimeoutException as te:
+                    log_info(f"MetaApi TimeoutException closing position {pos_id}: {te}")
+                    all_closed = False
                 except Exception as e:
                     log_info(f"Failed to close position {pos_id}: {e}")
                     all_closed = False
+    except TimeoutException as e:
+        log_info(f"MetaApi TimeoutException during flatten: {e}")
+        all_closed = False
     except Exception as e:
         log_info(f"Failed to flatten: {e}")
         all_closed = False
@@ -481,7 +639,7 @@ async def hedge_all_positions(reason: str = "CIRCUIT BREAKER") -> None:
         return
     log_info(f"HEDGING ALL POSITIONS! REASON: {reason}")
     try:
-        mt5_positions = await meta_api_wrapper.connection.get_positions()
+        mt5_positions = await fetch_positions_safe(meta_api_wrapper)
         if mt5_positions is None:
             return
         total_long = sum(float(p.get("volume", 0)) for p in mt5_positions if p.get("type") == "POSITION_TYPE_BUY")
@@ -496,6 +654,8 @@ async def hedge_all_positions(reason: str = "CIRCUIT BREAKER") -> None:
                 meta_api_wrapper.route_order({"symbol": symbol, "side": action, "type": "MARKET", "quantity": str(qty)}),
                 timeout=10.0,
             )
+    except TimeoutException as e:
+        log_info(f"MetaApi TimeoutException hedging: {e}")
     except Exception as e:
         log_info(f"Failed to hedge: {e}")
 
@@ -506,6 +666,7 @@ class BreakoutState:
     def __init__(self, client_prefix: str) -> None:
         """Initialize breakout state."""
         self.client_id = client_prefix
+        self.client_prefix = client_prefix
         self.side = 0
         self.lots = 0.0
         self.trailing_stop = 0.0
@@ -652,7 +813,7 @@ async def main() -> None:
     state = BreakoutState(client_prefix)
 
     try:
-        await cancel_pending_orders(symbol)
+        await cancel_pending_orders(symbol, client_prefix=client_prefix)
     except Exception as e:
         log_info(f"Startup cleanup error: {e}")
 
@@ -664,12 +825,9 @@ async def main() -> None:
         current_atr = 50.0
 
     fallback_bal = 94939.28
-    try:
-        acc_info = await meta_api_wrapper.get_account_information_rest()
-        if acc_info:
-            fallback_bal = float(acc_info.get("balance", fallback_bal))
-    except Exception:
-        pass
+    acc_info = await fetch_account_information_safe(meta_api_wrapper)
+    if acc_info:
+        fallback_bal = float(acc_info.get("balance", fallback_bal))
 
     watermark_path = "/home/solveetcoagula/odin_ftmo/daily_watermark.json"
     daily_start_equity = fallback_bal
@@ -732,7 +890,7 @@ async def main() -> None:
             spread = ask - bid
             mid = (bid + ask) / 2.0
 
-            acc_info = await meta_api_wrapper.get_account_information_rest()
+            acc_info = await fetch_account_information_safe(meta_api_wrapper)
             eq = float(acc_info.get("equity", daily_start_equity)) if acc_info else daily_start_equity
             bal = float(acc_info.get("balance", daily_start_equity)) if acc_info else daily_start_equity
 
@@ -743,19 +901,71 @@ async def main() -> None:
                 await asyncio.sleep(300.0)
                 continue
 
-            mt5_positions = await meta_api_wrapper.connection.get_positions()
+            mt5_positions = await fetch_positions_safe(meta_api_wrapper)
+            if mt5_positions is None:
+                log_info("Broker positions unavailable due to disconnect or timeout. Preserving current state.")
+                await asyncio.sleep(2.0)
+                continue
+
             actual_lots = 0.0
             actual_side = 0
-            if mt5_positions is not None:
-                for p in mt5_positions:
-                    if p.get("symbol") == mt5_sym:
-                        vol = float(p.get("volume", 0.0))
-                        side = 1 if p.get("type") == "POSITION_TYPE_BUY" else -1
-                        actual_lots += vol
-                        actual_side = side
+            for p in mt5_positions:
+                p_cid = str(p.get("comment") or p.get("clientId") or "")
+                if p.get("symbol") == mt5_sym and p_cid.startswith(state.client_id):
+                    vol = float(p.get("volume", 0.0))
+                    side = 1 if p.get("type") == "POSITION_TYPE_BUY" else -1
+                    actual_lots += vol
+                    actual_side = side
+                    
+                    if p.get("openPrice") and getattr(state, "entry_price", 0.0) == 0.0:
+                        state.entry_price = float(p["openPrice"])
+                    if p.get("stopLoss"):
+                        state.broker_sl = float(p["stopLoss"])
 
             state.side = actual_side if actual_lots > 0 else 0
             state.lots = actual_lots
+
+            if state.side != 0:
+                state.current_price = mid
+                
+                trail_dist = 15.0
+                trigger_pts = 15.0
+                sl_changed = False
+                
+                if state.side == 1 and state.broker_sl > 0.0:
+                    favorable = state.current_price - state.entry_price
+                    if favorable >= trigger_pts:
+                        sl_changed = True
+                        new_sl = state.current_price - trail_dist
+                        if state.broker_sl == 0.0 or new_sl > state.broker_sl:
+                            state.broker_sl = new_sl
+                            
+                elif state.side == -1 and state.broker_sl > 0.0:
+                    favorable = state.entry_price - state.current_price
+                    if favorable >= trigger_pts:
+                        sl_changed = True
+                        new_sl = state.current_price + trail_dist
+                        if state.broker_sl == 0.0 or new_sl < state.broker_sl:
+                            state.broker_sl = new_sl
+                            
+                if sl_changed:
+                    pos_id = None
+                    for p in mt5_positions:
+                        p_cid = str(p.get("comment") or p.get("clientId") or "")
+                        if p.get("symbol") == mt5_sym and p_cid.startswith(state.client_id):
+                            pos_id = p.get("id")
+                            break
+                    if pos_id:
+                        try:
+                            await asyncio.wait_for(
+                                meta_api_wrapper.connection.modify_position(pos_id, stop_loss=state.broker_sl),
+                                timeout=5.0,
+                            )
+                            log_info(f"Trailing Stop Updated: Pos={pos_id}, New SL={state.broker_sl:.2f}, Favorable={favorable:.2f}")
+                        except TimeoutException as te:
+                            log_info(f"MetaApi TimeoutException trailing SL for pos {pos_id}: {te}")
+                        except Exception as e:
+                            log_info(f"Failed to trail SL: {e}")
 
             if trading_halted_for_day:
                 await asyncio.sleep(2.0)
@@ -822,18 +1032,24 @@ async def main() -> None:
                         state.order_pending_until = time.time() + 60.0
 
             if state.side != 0:
-                orders = await meta_api_wrapper.connection.get_orders()
+                orders = await fetch_orders_safe(meta_api_wrapper)
                 if orders is not None:
                     for o in orders:
-                        if o.get("symbol") == mt5_sym and o.get("type") in ["ORDER_TYPE_BUY_STOP", "ORDER_TYPE_SELL_STOP"]:
+                        o_cid = str(o.get("comment") or o.get("clientId") or "")
+                        if o.get("symbol") == mt5_sym and o.get("type") in ["ORDER_TYPE_BUY_STOP", "ORDER_TYPE_SELL_STOP"] and o_cid.startswith(state.client_id):
                             log_info(f"OCO Triggered: Canceling opposing stop order {o['id']}")
                             try:
                                 await asyncio.wait_for(meta_api_wrapper.cancel_order(o["id"]), timeout=5.0)
+                            except TimeoutException as te:
+                                log_info(f"MetaApi TimeoutException canceling opposing stop order {o['id']}: {te}")
                             except Exception:
                                 pass
 
             await asyncio.sleep(2.0)
 
+        except TimeoutException as e:
+            log_info(f"MetaApi TimeoutException in main loop: {e}. Cooldown for 2.0s.")
+            await asyncio.sleep(2.0)
         except Exception as e:
             log_info(f"Main Loop Error: {e}")
             await asyncio.sleep(2.0)

@@ -42,7 +42,7 @@ class GoldEngine:
         
         # Default config values
         self.symbol = "XAUUSD"
-        self.risk_pct = 0.01
+        self.risk_pct = 0.005
         self.contract_size = 100.0 # Standard Gold contract size
         self.tick_value = 1.0
         self.order_comment = "GRIFF_GOLD_BREAKOUT"

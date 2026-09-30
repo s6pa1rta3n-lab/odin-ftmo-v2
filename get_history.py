@@ -1,0 +1,31 @@
+import asyncio
+from datetime import datetime, timedelta
+from metaapi_cloud_sdk import MetaApi
+
+API_KEY = "eyJhbGciOiJSUzUxMiIsInR5cCI6IkpXVCJ9.eyJfaWQiOiI4OWM2YmEzNGVlYWM2MWVhMTZkNTc3YTA2NTQ1YzFjNSIsImFjY2Vzc1J1bGVzIjpbeyJpZCI6InRyYWRpbmctYWNjb3VudC1tYW5hZ2VtZW50LWFwaSIsIm1ldGhvZHMiOlsidHJhZGluZy1hY2NvdW50LW1hbmFnZW1lbnQtYXBpOnJlc3Q6cHVibGljOio6KiJdLCJyb2xlcyI6WyJyZWFkZXIiLCJ3cml0ZXIiXSwicmVzb3VyY2VzIjpbIio6JFVTRVJfSUQkOioiXX0seyJpZCI6Im1ldGFhcGktcmVzdC1hcGkiLCJtZXRob2RzIjpbIm1ldGFhcGktYXBpOnJlc3Q6cHVibGljOio6KiJdLCJyb2xlcyI6WyJyZWFkZXIiLCJ3cml0ZXIiXSwicmVzb3VyY2VzIjpbIio6JFVTRVJfSUQkOioiXX0seyJpZCI6Im1ldGFhcGktcnBjLWFwaSIsIm1ldGhvZHMiOlsibWV0YWFwaS1hcGk6d3M6cHVibGljOio6KiJdLCJyb2xlcyI6WyJyZWFkZXIiLCJ3cml0ZXIiXSwicmVzb3VyY2VzIjpbIio6JFVTRVJfSUQkOioiXX0seyJpZCI6Im1ldGFhcGktcmVhbC10aW1lLXN0cmVhbWluZy1hcGkiLCJtZXRob2RzIjpbIm1ldGFhcGktYXBpOndzOnB1YmxpYzoqOioiXSwicm9sZXMiOlsicmVhZGVyIiwid3JpdGVyIl0sInJlc291cmNlcyI6WyIqOiRVU0VSX0lEJDoqIl19LHsiaWQiOiJtZXRhc3RhdHMtYXBpIiwibWV0aG9kcyI6WyJtZXRhc3RhdHMtYXBpOnJlc3Q6cHVibGljOio6KiJdLCJyb2xlcyI6WyJyZWFkZXIiLCJ3cml0ZXIiXSwicmVzb3VyY2VzIjpbIio6JFVTRVJfSUQkOioiXX0seyJpZCI6InJpc2stbWFuYWdlbWVudC1hcGkiLCJtZXRob2RzIjpbInJpc2stbWFuYWdlbWVudC1hcGk6cmVzdDpwdWJsaWM6KjoqIl0sInJvbGVzIjpbInJlYWRlciIsIndyaXRlciJdLCJyZXNvdXJjZXMiOlsiKjokVVNFUl9JRCQ6KiJdfSx7ImlkIjoiY29weWZhY3RvcnktYXBpIiwibWV0aG9kcyI6WyJjb3B5ZmFjdG9yeS1hcGk6cmVzdDpwdWJsaWM6KjoqIl0sInJvbGVzIjpbInJlYWRlciIsIndyaXRlciJdLCJyZXNvdXJjZXMiOlsiKjokVVNFUl9JRCQ6KiJdfSx7ImlkIjoibXQtbWFuYWdlci1hcGkiLCJtZXRob2RzIjpbIm10LW1hbmFnZXItYXBpOnJlc3Q6ZGVhbGluZzoqOioiLCJtdC1tYW5hZ2VyLWFwaTpyZXN0OnB1YmxpYzoqOioiXSwicm9sZXMiOlsicmVhZGVyIiwid3JpdGVyIl0sInJlc291cmNlcyI6WyIqOiRVU0VSX0lEJDoqIl19LHsiaWQiOiJiaWxsaW5nLWFwaSIsIm1ldGhvZHMiOlsiYmlsbGluZy1hcGk6cmVzdDpwdWJsaWM6KjoqIl0sInJvbGVzIjpbInJlYWRlciJdLCJyZXNvdXJjZXMiOlsiKjokVVNFUl9JRCQ6KiJdfV0sImlnbm9yZVJhdGVMaW1pdHMiOmZhbHNlLCJ0b2tlbklkIjoiMjAyMTAyMTMiLCJpbXBlcnNvbmF0ZWQiOmZhbHNlLCJyZWFsVXNlcklkIjoiODljNmJhMzRlZWFjNjFlYTE2ZDU3N2EwNjU0NWMxYzUiLCJpYXQiOjE3ODQwNDE0NjV9.OA2jO5kUtt2kjp-OEfF4P6nYSea82bJo1xUhIAsVOHBhVJUo4Me3visIU8C5imCrvJ-yLRONEZGycyFvUKMBgzmobCPTW_-1Slx3tt8aWTgpDZyKLXHOIr0UCV4k787OrGPzqS5ViGmHMfzlvJdW9W8cMXvnz4vSUc0-uiiNuFXKIxSGMQQf55SHi9asfs8PUPEUbu4dzzlJ8ttcz6NEFJ1SdJLFKiwalDex6-qr0NVjebvZBRNoaY8H9H45ksNW7bhjUYs58y70Dx5bSt0O4PhspWVIj6v6nYpKlHr9pYKa9piHV9J7bMKhKCJXdEGCGj8ezQSeeiMjJusx1sjg4wmwIgfLvB-7GlRbiq-GoDqOZbOILsUJyJHUAffB6ofl_BrlEVoyJBn1nkAwtovfHHEBwkay8L0o5nFPhAxFea_DPHsXNIQuknaNIjfL-uAJbejuFwSmU3KusRuVR2ZdqEDRm1c1rRWMbCeHToreHoVtDmJ4jpEh5Rg7CdVXQ1nkbR1FajFAz1JV90Ji0DJ_N3EPJ8f4VBpayGOmO83LfZJQJNDa_xkJIemAGLl0bUSkV19GXHjoNdTMJpIzGq0TUV1zfM8A85Tp5HcdrbcnrEBcW7P-GbKh0OUUaSPxEPihpzAYQyvC_K_joAPFZuaSRJVAxsNMqG5lInHSLDyoevg"
+ACCOUNT_ID = "6ccd891f-8728-4e37-ad41-1e695c6008ef"
+
+async def main():
+    api = MetaApi(API_KEY)
+    account = await api.metatrader_account_api.get_account(ACCOUNT_ID)
+    connection = account.get_rpc_connection()
+    await connection.connect()
+    await connection.wait_synchronized()
+    
+    end_time = datetime.now()
+    start_time = end_time - timedelta(hours=6)
+    
+    history = await connection.get_history_orders_by_time_range(start_time, end_time)
+    
+    print("--- COMPLETED ORDERS ---")
+    for order in history.get('historyOrders', []):
+        if order.get('symbol') == 'US100.cash':
+            print(order)
+
+    print("--- DEALS ---")
+    deals = await connection.get_deals_by_time_range(start_time, end_time)
+    for deal in deals.get('deals', []):
+        if deal.get('symbol') == 'US100.cash':
+            print(deal)
+
+asyncio.run(main())

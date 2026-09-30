@@ -182,11 +182,12 @@ async def execute_market_order(
     return res
 
 
-async def cancel_pending_orders(symbol: str) -> None:
-    """Cancel all active pending orders for the specified symbol.
+async def cancel_pending_orders(symbol: str, client_prefix: Optional[str] = None) -> None:
+    """Cancel all active pending orders for the specified symbol matching client_prefix.
 
     Parameters:
         symbol: Symbol whose pending orders should be canceled.
+        client_prefix: Optional prefix to filter orders by comment or clientId.
     """
     if meta_api_wrapper is None:
         return
@@ -196,25 +197,32 @@ async def cancel_pending_orders(symbol: str) -> None:
         if orders is not None:
             for o in orders:
                 if o.get("symbol") == mt5_sym:
+                    o_cid = str(o.get("comment") or o.get("clientId") or "")
+                    if client_prefix is not None and not o_cid.startswith(client_prefix):
+                        continue
                     await meta_api_wrapper.cancel_order(o["id"])
                     log_info(f"Canceled pending limit order {o['id']} on {mt5_sym}")
     except Exception as e:
         log_info(f"Error canceling orders: {e}")
 
 
-async def flatten_all_positions(reason: str = "LIQUIDATION") -> None:
+async def flatten_all_positions(client_prefix: str, reason: str = "LIQUIDATION") -> None:
     """Close all open positions on the account at market.
 
     Parameters:
+        client_prefix: The prefix of the positions to close.
         reason: Audit explanation for position liquidation.
     """
     if meta_api_wrapper is None:
         return
-    log_info(f"FLATTENING ALL POSITIONS | Reason: {reason}")
+    log_info(f"FLATTENING POSITIONS FOR {client_prefix} | Reason: {reason}")
     try:
         positions = await meta_api_wrapper.get_positions_rest()
         if positions is not None:
             for p in positions:
+                p_cid = str(p.get("comment") or p.get("clientId") or "")
+                if not p_cid.startswith(client_prefix):
+                    continue
                 sym = p.get("symbol")
                 qty = p.get("volume")
                 side = "LONG" if p.get("type") == "POSITION_TYPE_BUY" else "SHORT"
@@ -359,14 +367,17 @@ async def main() -> None:
 
     mt5_sym = meta_api_wrapper._to_mt5(symbol)
     if mt5_sym and hasattr(meta_api_wrapper, "streaming_connection") and meta_api_wrapper.streaming_connection:
-        await meta_api_wrapper.streaming_connection.subscribe_to_market_data(mt5_sym)
-        log_info(f"Subscribed to market data stream for {mt5_sym}")
+        try:
+            await meta_api_wrapper.streaming_connection.subscribe_to_market_data(mt5_sym)
+            log_info(f"Subscribed to market data stream for {mt5_sym}")
+        except Exception as e:
+            log_info(f"Market data stream subscription failed: {e}")
 
     client_prefix = f"LNDN_{entry_mode_name[:4].upper()}"
     state = ReversalState(client_prefix)
 
     try:
-        await cancel_pending_orders(symbol)
+        await cancel_pending_orders(symbol, client_prefix=client_prefix)
     except Exception as e:
         log_info(f"Startup order cleanup error: {e}")
 
@@ -429,8 +440,8 @@ async def main() -> None:
 
             if current_utc.hour == 13 and current_utc.minute >= 0 and not trading_halted_for_day:
                 log_info("End of Session Liquidation (13:00 UTC). Flattening positions.")
-                await flatten_all_positions(reason="13:00 UTC HANDOFF")
-                await cancel_pending_orders(symbol)
+                await flatten_all_positions(client_prefix, reason="13:00 UTC HANDOFF")
+                await cancel_pending_orders(symbol, client_prefix=client_prefix)
                 state.side = 0
                 state.lots = 0.0
                 trading_halted_for_day = True
@@ -464,7 +475,8 @@ async def main() -> None:
             pos_id = None
             for p in cached_positions:
                 if p.get("symbol") == mt5_sym:
-                    if client_prefix in p.get("comment", p.get("clientId", "")):
+                    p_cid = str(p.get("comment") or p.get("clientId") or "")
+                    if p_cid.startswith(client_prefix):
                         actual_side = 1 if p.get("type") == "POSITION_TYPE_BUY" else -1
                         actual_lots += float(p.get("volume", 0.0))
                         open_price = float(p.get("openPrice", mid))
@@ -503,7 +515,7 @@ async def main() -> None:
                         cached_orders = res_ord
 
                 has_pending = any(
-                    o.get("symbol") == mt5_sym and client_prefix in o.get("comment", o.get("clientId", ""))
+                    o.get("symbol") == mt5_sym and str(o.get("comment") or o.get("clientId") or "").startswith(client_prefix)
                     for o in cached_orders
                 )
 
@@ -565,7 +577,8 @@ async def main() -> None:
                     if res_ord is not None:
                         cached_orders = res_ord
                 for o in cached_orders:
-                    if o.get("symbol") == mt5_sym and client_prefix in o.get("comment", o.get("clientId", "")):
+                    o_cid = str(o.get("comment") or o.get("clientId") or "")
+                    if o.get("symbol") == mt5_sym and o_cid.startswith(client_prefix):
                         log_info(f"OCO Triggered: Canceling opposing limit order {o['id']}")
                         await meta_api_wrapper.cancel_order(o["id"])
 
