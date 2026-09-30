@@ -95,6 +95,88 @@ def compute_atr_14(candles: List[Dict[str, Any]]) -> float:
     return round(sum(recent_14_tr) / 14.0, 4)
 
 
+
+def compute_adx(candles, period=14):
+    if len(candles) <= period: return [0]*len(candles)
+    tr_list, pdm, ndm = [0], [0], [0]
+    for i in range(1, len(candles)):
+        c, pc = candles[i], candles[i-1]
+        tr = max(float(c['high']) - float(c['low']), abs(float(c['high']) - float(pc['close'])), abs(float(c['low']) - float(pc['close'])))
+        up = float(c['high']) - float(pc['high'])
+        dn = float(pc['low']) - float(c['low'])
+        pos = up if up > dn and up > 0 else 0
+        neg = dn if dn > up and dn > 0 else 0
+        tr_list.append(tr)
+        pdm.append(pos)
+        ndm.append(neg)
+    
+    adx, dx = [0]*len(candles), [0]*len(candles)
+    if len(candles) <= period*2: return adx
+    
+    sm_tr = sum(tr_list[1:period+1])
+    sm_pdm = sum(pdm[1:period+1])
+    sm_ndm = sum(ndm[1:period+1])
+    
+    for i in range(period, len(candles)):
+        if i > period:
+            sm_tr = sm_tr - (sm_tr / period) + tr_list[i]
+            sm_pdm = sm_pdm - (sm_pdm / period) + pdm[i]
+            sm_ndm = sm_ndm - (sm_ndm / period) + ndm[i]
+        
+        pdi = 100 * (sm_pdm / sm_tr) if sm_tr > 0 else 0
+        ndi = 100 * (sm_ndm / sm_tr) if sm_tr > 0 else 0
+        diff = abs(pdi - ndi)
+        summ = pdi + ndi
+        dx[i] = 100 * (diff / summ) if summ > 0 else 0
+        
+    adx[period*2 - 1] = sum(dx[period:period*2]) / period
+    for i in range(period*2, len(candles)):
+        adx[i] = (adx[i-1] * (period - 1) + dx[i]) / period
+    return adx
+
+def compute_ema_50(candles: List[Dict[str, Any]]) -> float:
+    """Calculate 50-period Exponential Moving Average."""
+    closes = [float(c["close"]) for c in candles[-50:]]
+    if not closes:
+        return 0.0
+    ema = closes[0]
+    multiplier = 2 / (50 + 1)
+    for price in closes[1:]:
+        ema = (price - ema) * multiplier + ema
+    return ema
+
+def calculate_structural_trailing_stop(
+    direction: str,
+    current_sl: float,
+    candles: List[Dict[str, Any]],
+    current_atr_14: float,
+) -> float:
+    """Calculate structural trailing stop loss using 1H swing points."""
+    if len(candles) < 3:
+        return current_sl
+
+    c1 = candles[-1] # latest
+    c2 = candles[-2] # previous
+    c3 = candles[-3] # older
+
+    # Distance buffer from structural point (tighter than initial, but based on structure)
+    distance = 0.5 * current_atr_14
+
+    if direction.upper() in ("BUY", "LONG"):
+        if float(c2["low"]) < float(c3["low"]) and float(c1["low"]) > float(c2["low"]):
+            candidate_sl = round(float(c2["low"]) - distance, 2)
+            return max(current_sl, candidate_sl)
+        return current_sl
+
+    if direction.upper() in ("SELL", "SHORT"):
+        if float(c2["high"]) > float(c3["high"]) and float(c1["high"]) < float(c2["high"]):
+            candidate_sl = round(float(c2["high"]) + distance, 2)
+            return min(current_sl, candidate_sl)
+        return current_sl
+
+    raise ValueError(f"Invalid direction: {direction}")
+
+
 def is_inside_bar(current: Dict[str, Any], previous: Dict[str, Any]) -> bool:
     """Determine if current bar is strictly inside previous mother bar.
 
@@ -613,6 +695,7 @@ class GriffLiveEngine:
         inside_bar: Dict[str, Any],
         atr_14: float,
         equity: float,
+        trend_direction: str = "BOTH",
     ) -> bool:
         """Place Buy Stop at inside bar high and Sell Stop at inside bar low.
 
@@ -688,31 +771,44 @@ class GriffLiveEngine:
         try:
             if hasattr(self.wrapper, "connection") and self.wrapper.connection:
                 opts = {"comment": self.order_comment}
-                res_buy = await self.wrapper.connection.create_stop_buy_order(
-                    mt5_sym,
-                    lots,
-                    buy_price,
-                    stop_loss=buy_sl,
-                    options=opts,
-                )
-                buy_order_id = res_buy.get("orderId") or res_buy.get("id")
-                logger.info("Buy Stop submitted at %.2f with SL %.2f (Order ID: %s)", buy_price, buy_sl, buy_order_id)
+                
+                if trend_direction in ("BUY", "BOTH"):
+                    res_buy = await self.wrapper.connection.create_stop_buy_order(
+                        mt5_sym,
+                        lots,
+                        buy_price,
+                        stop_loss=buy_sl,
+                        options=opts,
+                    )
+                    buy_order_id = res_buy.get("orderId") or res_buy.get("id")
+                    logger.info("Buy Stop submitted at %.2f with SL %.2f (Order ID: %s)", buy_price, buy_sl, buy_order_id)
 
-                res_sell = await self.wrapper.connection.create_stop_sell_order(
-                    mt5_sym,
-                    lots,
-                    sell_price,
-                    stop_loss=sell_sl,
-                    options=opts,
-                )
-                sell_order_id = res_sell.get("orderId") or res_sell.get("id")
-                logger.info("Sell Stop submitted at %.2f with SL %.2f (Order ID: %s)", sell_price, sell_sl, sell_order_id)
+                if trend_direction in ("SELL", "BOTH"):
+                    res_sell = await self.wrapper.connection.create_stop_sell_order(
+                        mt5_sym,
+                        lots,
+                        sell_price,
+                        stop_loss=sell_sl,
+                        options=opts,
+                    )
+                    sell_order_id = res_sell.get("orderId") or res_sell.get("id")
+                    logger.info("Sell Stop submitted at %.2f with SL %.2f (Order ID: %s)", sell_price, sell_sl, sell_order_id)
         except Exception as err:
             logger.error("Failed to place pending stop orders: %s", err)
             return False
 
         self.pending_buy_order_id = buy_order_id
         self.pending_sell_order_id = sell_order_id
+        self.pending_orders = []
+        if buy_order_id:
+            self.pending_orders.append({"id": buy_order_id, "type": "STOP_BUY", "price": buy_price, "sl": buy_sl, "volume": lots})
+        if sell_order_id:
+            self.pending_orders.append({"id": sell_order_id, "type": "STOP_SELL", "price": sell_price, "sl": sell_sl, "volume": lots})
+        self.pending_orders = []
+        if buy_order_id:
+            self.pending_orders.append({"id": buy_order_id, "type": "STOP_BUY", "price": buy_price, "sl": buy_sl, "volume": lots})
+        if sell_order_id:
+            self.pending_orders.append({"id": sell_order_id, "type": "STOP_SELL", "price": sell_price, "sl": sell_sl, "volume": lots})
         self.pending_setup_bar_time = inside_bar.get("time")
         self.state = "PENDING_PLACED"
         return True
@@ -755,11 +851,11 @@ class GriffLiveEngine:
                 self.active_position = None
                 self.state = "SEARCHING"
 
-    async def ratchet_trailing_stop(self, completed_bar: Dict[str, Any], atr_14: float) -> None:
-        """Evaluate 1.5x ATR trailing stop ratchet upon 1H bar close.
+    async def ratchet_trailing_stop(self, candles: List[Dict[str, Any]], atr_14: float) -> None:
+        """Evaluate structural trailing stop ratchet upon 1H bar close.
 
         Args:
-            completed_bar: Latest completed 1H candle.
+            candles: List of historical completed candles.
             atr_14: Current 14-period ATR.
         """
         if not self.active_position or not self.wrapper or not hasattr(self.wrapper, "connection"):
@@ -767,22 +863,20 @@ class GriffLiveEngine:
 
         direction = self.active_position["direction"]
         current_sl = float(self.active_position.get("sl", 0.0))
-        bar_close = float(completed_bar["close"])
         ticket_id = self.active_position.get("id")
 
         if not ticket_id:
             return
 
-        candidate_sl = calculate_trailing_stop(direction, current_sl, bar_close, atr_14)
+        candidate_sl = calculate_structural_trailing_stop(direction, current_sl, candles, atr_14)
 
         if candidate_sl != current_sl:
             logger.info(
-                "Ratcheting Trailing Stop for ticket %s (%s) from %.2f to %.2f (Bar Close: %.2f, ATR: %.2f)",
+                "Ratcheting Structural Trailing Stop for ticket %s (%s) from %.2f to %.2f (ATR: %.2f)",
                 ticket_id,
                 direction,
                 current_sl,
                 candidate_sl,
-                bar_close,
                 atr_14,
             )
             try:
@@ -809,18 +903,19 @@ class GriffLiveEngine:
 
         await self.synchronize_active_positions()
 
-        candles = await self.fetch_completed_1h_candles(limit=30)
-        if len(candles) < 15:
-            logger.info("Accumulating history: %d/15 required completed 1H candles", len(candles))
+        candles = await self.fetch_completed_1h_candles(limit=60)
+        if len(candles) < 50:
+            logger.info("Accumulating history: %d/50 required completed 1H candles", len(candles))
             return {"status": "ACCUMULATING_HISTORY", "count": len(candles)}
 
         atr_14 = compute_atr_14(candles)
+        ema_50 = compute_ema_50(candles)
         latest_completed_bar = candles[-1]
         latest_bar_time = latest_completed_bar.get("time")
 
         if self.state == "IN_TRADE" and self.active_position:
             if self.last_evaluated_bar_time != latest_bar_time:
-                await self.ratchet_trailing_stop(latest_completed_bar, atr_14)
+                await self.ratchet_trailing_stop(candles, atr_14)
                 self.last_evaluated_bar_time = latest_bar_time
             return {"status": "IN_TRADE", "position": self.active_position, "atr_14": atr_14}
 
@@ -834,17 +929,34 @@ class GriffLiveEngine:
             mother_bar = candles[-2]
             current_bar = candles[-1]
             if is_inside_bar(current_bar, mother_bar):
-                logger.info("Inside Bar confirmed on bar %s", latest_bar_time)
-                await self.place_pending_breakout_orders(current_bar, atr_14, self.current_equity)
+                # MACRO-TREND FILTER (50 EMA)
+                close_price = float(current_bar["close"])
+                trend_direction = "BUY" if close_price > ema_50 else "SELL"
+                
+                logger.info("Inside Bar confirmed on bar %s. Macro Trend: %s (EMA50: %.2f)", latest_bar_time, trend_direction, ema_50)
+                
+                adx_values = compute_adx(candles, 14)
+                current_adx = adx_values[-1] if adx_values else 0
+                
+                if current_adx < 25:
+                    logger.info("ADX Filter Blocked Trade: Current ADX is %.2f (Requires >= 25). Skipping chop.", current_adx)
+                    return {"status": "SKIPPED_ADX_LOW", "atr_14": atr_14, "bar": latest_bar_time}
+                
+                logger.info("ADX is %.2f. Trend is strong. Proceeding to place orders.", current_adx)
+                
+                # We place the pending breakout orders, but the place_pending_breakout_orders method needs to be aware of the trend
+                # We'll pass the trend to place_pending_breakout_orders to only place the aligned order
+                await self.place_pending_breakout_orders(current_bar, atr_14, self.current_equity, trend_direction)
                 return {"status": "SETUP_PLACED", "atr_14": atr_14, "bar": latest_bar_time}
             else:
                 logger.info(
-                    "Scanning 1H Bars | Latest Close: %.2f | ATR_14: %.2f | Setup: None",
-                    latest_completed_bar.get("close", 0.0),
+                    "Scanning 1H Bars | Latest Close: %.2f | EMA_50: %.2f | ATR_14: %.2f | Setup: None",
+                    float(latest_completed_bar.get("close", 0.0)),
+                    ema_50,
                     atr_14,
                 )
 
-        return {"status": "SEARCHING", "atr_14": atr_14, "equity": self.current_equity}
+        return {"status": self.state, "atr_14": atr_14, "equity": self.current_equity}
 
     async def run_loop(self, poll_interval_seconds: float = 30.0) -> None:
         """Run continuous strategy monitoring event loop.
@@ -858,8 +970,20 @@ class GriffLiveEngine:
         while self.is_running and not self.halted:
             try:
                 await self.step()
+                import json
+                state_dump = {
+                    "state": self.state,
+                    "equity": self.current_equity,
+                    "active_position": self.active_position,
+                    "pending_buy_order_id": self.pending_buy_order_id,
+                    "pending_sell_order_id": self.pending_sell_order_id,
+                    "pending_setup_bar_time": self.pending_setup_bar_time.isoformat() if hasattr(self.pending_setup_bar_time, "isoformat") else self.pending_setup_bar_time,
+                }
+                with open("/home/solveetcoagula/odin_ftmo/live_state.json", "w") as f:
+                    json.dump(state_dump, f)
             except Exception as err:
                 logger.error("Unexpected error during strategy cycle: %s", err, exc_info=True)
+            
 
             await asyncio.sleep(poll_interval_seconds)
 
