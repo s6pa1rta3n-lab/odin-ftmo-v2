@@ -34,6 +34,53 @@ console = logging.StreamHandler()
 console.setFormatter(logging.Formatter('[%(asctime)s] [%(levelname)s] %(message)s'))
 logger.addHandler(console)
 
+
+def compute_adx(candles, period=14):
+    import numpy as np
+    import pandas as pd
+    df = pd.DataFrame(candles)
+    df['high'] = df['high'].astype(float)
+    df['low'] = df['low'].astype(float)
+    df['close'] = df['close'].astype(float)
+    adx = np.zeros(len(df))
+    if len(df) <= period * 2:
+        return adx.tolist()
+    
+    high = df['high'].values
+    low = df['low'].values
+    close = df['close'].shift(1).values
+    
+    tr_list, pdm, ndm = [0], [0], [0]
+    for i in range(1, len(df)):
+        tr = max(high[i] - low[i], abs(high[i] - close[i]), abs(low[i] - close[i]))
+        up = high[i] - high[i-1]
+        dn = low[i-1] - low[i]
+        tr_list.append(tr)
+        pdm.append(up if up > dn and up > 0 else 0)
+        ndm.append(dn if dn > up and dn > 0 else 0)
+        
+    dx = [0] * len(df)
+    sm_tr = sum(tr_list[1:period+1])
+    sm_pdm = sum(pdm[1:period+1])
+    sm_ndm = sum(ndm[1:period+1])
+    
+    for i in range(period, len(df)):
+        if i > period:
+            sm_tr = sm_tr - (sm_tr / period) + tr_list[i]
+            sm_pdm = sm_pdm - (sm_pdm / period) + pdm[i]
+            sm_ndm = sm_ndm - (sm_ndm / period) + ndm[i]
+        pdi = 100 * (sm_pdm / sm_tr) if sm_tr > 0 else 0
+        ndi = 100 * (sm_ndm / sm_tr) if sm_tr > 0 else 0
+        summ = pdi + ndi
+        dx[i] = 100 * (abs(pdi - ndi) / summ) if summ > 0 else 0
+        
+    adx[period*2 - 1] = sum(dx[period:period*2]) / period
+    for i in range(period*2, len(df)):
+        adx[i] = (adx[i-1] * (period - 1) + dx[i]) / period
+        
+    return adx.tolist()
+
+
 class OdinDaemon:
     def __init__(self, symbol='BTCUSDT', risk_pct=0.01):
         self.client = AsterdexClient()
@@ -87,7 +134,10 @@ class OdinDaemon:
             if len(candles) < 55:
                 return
                 
+            
             atr_list = compute_atr(candles)
+            adx_list = compute_adx(candles)
+
             
             prev_bar = candles[-2]
             mother_bar = candles[-3]
@@ -127,6 +177,10 @@ class OdinDaemon:
                 self.last_evaluated_bar_time = latest_completed_time
                 
                 if is_inside_bar(prev_bar, mother_bar):
+                    if adx_list[-2] < 25:
+                        logger.info(f"Inside Bar ignored due to low ADX ({adx_list[-2]:.2f} < 25).")
+                        return
+                        
                     equity = self.fetch_equity()
                     atr_14 = atr_list[-2]
                     sl_points = 1.5 * atr_14
