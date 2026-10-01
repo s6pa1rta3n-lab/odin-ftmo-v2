@@ -1,10 +1,10 @@
 # Cutover
 
-Odin approved production cutover (Stage 4) on 2026-10-01, after Stage 2 and the Stage 3 safe canary were recorded, so the procedure and the rollback live in git.
+Odin approved production cutover (Stage 4) on 2026-10-01. Operators then completed it on matt-berserker the same day. **Verdict: PASS** (~12:44–12:49 EDT). Full report: [evidence/2026-10-01-stage4-cutover.md](evidence/2026-10-01-stage4-cutover.md).
 
-**This commit does not cut over the VM.** It does not install a unit, `daemon-reload`, start or stop a process, or change a live systemd file. The default in code remains `ODIN_METAAPI_HUB` off. Engines keep constructing `MetaApiWrapper` until an operator sets the flag on purpose. Strategy logic and config files stay as they are. The hub is plumbing.
+This documentation commit only records that report. It does not install a unit, `daemon-reload`, or start or stop a process. The default in code remains `ODIN_METAAPI_HUB` off, so removing the drop-in returns each engine to `MetaApiWrapper`. Strategy logic and config files stay as they are. The hub is plumbing.
 
-Stage 2 and the Stage 3 canary were run by operators on `matt-berserker` at `bcd48ff0b6900c24ce2bb861f9b7410740507cc4`. This documentation records what they reported. It does not re-verify the host.
+Stage 2, the Stage 3 canary, and the Stage 4 hub package are the operator's run of `bcd48ff0b6900c24ce2bb861f9b7410740507cc4`. This file records what they reported. It does not re-verify the host.
 
 ## Unit names on matt-berserker
 
@@ -77,68 +77,79 @@ The canary used all four live-order interlocks, on a sandbox checkout, for those
 
 Anomaly that must not be repeated: `kill -0` from `reemanos8422` against the `solveetcoagula` hub PID returns EPERM, and a script treated that as "PID gone". See [RUNBOOK.md](RUNBOOK.md).
 
-### Stage 4 — production cutover — approved by Odin 2026-10-01
+### Stage 4 — production cutover — COMPLETED / PASS 2026-10-01
 
-Approved so it can be done from this document and rolled back from git. **Not performed by the commit that added this section.**
+Operator report, ~12:44–12:49 EDT. This commit did not perform the cutover. Details and the installed unit text: [evidence/2026-10-01-stage4-cutover.md](evidence/2026-10-01-stage4-cutover.md).
 
-Strategies, risk, session windows, and order comments in the engines stay as they are. The hub does not replace them. Canary comments `hub-canary-*` were probe orders, not strategy comments.
+| Item | Reported result |
+| --- | --- |
+| Verdict | PASS |
+| Hub SHA | `bcd48ff0b6900c24ce2bb861f9b7410740507cc4` |
+| Stop Griff | 2026-10-01T16:44:58Z (12:44:58 EDT) |
+| Hub started | 2026-10-01T16:46:08Z (12:46:08 EDT) |
+| Report written | 2026-10-01T16:49:38Z (12:49:38 EDT) |
+| Hub unit | `odin-metaapi-hub` active and enabled, MainPID 2775860 |
+| Durable package | `/home/solveetcoagula/odin-ftmo-hub/metaapi_hub/` plus `HUB_SHA.txt` |
+| Also copied | `/home/solveetcoagula/odin_ftmo/metaapi_hub/` |
+| Drop-ins | `/etc/systemd/system/griff_engine_{btc,us100,gold}.service.d/hub.conf` |
+| Engine backups | `griff_engine_live.py.pre-hub-20261001`, `griff_engine_us100.py.pre-hub-20261001`, `griff_engine_gold.py.pre-hub-20261001` |
+| Health 16:49:27Z | `synchronize_calls` 1, `orders_live` true, `connected` true, `reconnects` 0, `sync_attempts` 1 |
+| Clients | btc, gold, us100 (`client_count` 3) |
+| Soak | 120s, sync stayed 1, reconnects stayed 0, no `TooManyRequests` in the first ~3 minutes of journals |
+| Orders through hub since flip | `broker_order_calls` 0, `broker_mutation_calls` 0 |
+| Candles | `candle_fetches` 2, `broker_candle_calls` 2, `broker_synchronize_calls` 1 |
+| Equity | 94061.91 (`live_state.json`) |
+| Left active | `nordvpnd`, `openvpn@asterdex`, `odin_daemon` |
+| Left inactive | `ftmo_london_reversal`, `ftmo_hft_omni`, `ftmo_omnibus` |
 
-#### Prerequisites
+Strategies, risk, and config JSON were unchanged. The live tree had no hub wiring before the flip (engines constructed `MetaApiWrapper` directly). Operators applied a factory patch from the sandbox: import `build_execution_wrapper` / `hub_mode` / `engine_name_for_symbol`, and replace the direct `MetaApiWrapper(...)` call. An import check from the engine WorkingDirectory printed `off` before the env flip. Journals after start: each engine "attached to MetaAPI hub without a local synchronization". `griff_engine_xau.service` exists and was not part of this cutover.
 
-1. Durable checkout of this branch, **not** `/tmp`. The canary sandbox `/tmp/odin-ftmo-hub-shadow` was deleted with the window. Recommended path for the operator to create by copying git (this commit has not checked that the directory exists on the VM):
+Installed hub unit (not the example file in this repo): `WorkingDirectory=/home/solveetcoagula/odin_ftmo`, `PYTHONPATH=/home/solveetcoagula/odin-ftmo-hub`, `ODIN_METAAPI_HUB_ORDERS=live`, and `ExecStart` with `--mode live --orders live --enable-live-orders`, the existing `config_us100.json`, account `a60dfd98-8a34-4c1b-9f2c-b40cdcc2c3bf`, socket `/run/odin/metaapi-hub.sock`.
 
-    `/home/solveetcoagula/odin-metaapi-hub`
+Installed drop-in (identical on btc, us100, gold):
 
-2. Hub process from that checkout, with every live-order interlock:
+```
+Environment=ODIN_METAAPI_HUB=on
+Environment=ODIN_METAAPI_HUB_SOCKET=/run/odin/metaapi-hub.sock
+Environment=PYTHONPATH=/home/solveetcoagula/odin_ftmo
+```
 
-    - `--mode live`
-    - `--orders live`
-    - `--enable-live-orders`
-    - `ODIN_METAAPI_HUB_ORDERS=live` on the hub process
-
-    The example that contains all four, and only that example, is `deploy/examples/odin-metaapi-hub.live-orders.service.example`. Installing it is the cutover. The shadow unit and the live-readonly example stay on `--orders deny`.
-
-3. Config stays the existing file, which is not in git:
-
-    `/home/solveetcoagula/odin_ftmo/config_us100.json`
-
-    Account id used by the canary and already in the setup scripts: `a60dfd98-8a34-4c1b-9f2c-b40cdcc2c3bf`. Do not put the token in the unit file or in git.
-
-4. Socket: `/run/odin/metaapi-hub.sock`. User: `solveetcoagula`.
-
-5. Engine drop-ins, one per Griff unit, from `deploy/examples/griff-hub-on.conf.example`:
-
-    ```
-    Environment=ODIN_METAAPI_HUB=on
-    Environment=ODIN_METAAPI_HUB_SOCKET=/run/odin/metaapi-hub.sock
-    Environment=PYTHONPATH=/home/solveetcoagula/odin-metaapi-hub
-    ```
-
-    `PYTHONPATH` must include the checkout that contains the `metaapi_hub` package when the live tree does not. The Stage 3 report says the live tree was not git-pulled. `ODIN_METAAPI_HUB` is read only by the hub-aware modules on this branch (`build_execution_wrapper` in `griff_engine_live.py`, `griff_engine_us100.py`, `griff_engine_gold.py`). If a unit still executes a pre-hub copy of those files, the drop-in does not attach it and that process keeps calling `wait_synchronized` itself. Run the hub-aware modules. Leave each unit's `WorkingDirectory`, `ExecStart`, and `--config` in place so strategy config is not replaced.
-
-6. London and Omni inactive, or explicitly stopped for the window. The three Griff units stopped **before** the hub starts.
-
-#### Procedure
-
-1. Record the hub-free state you will restore: `systemctl show` Environment and DropInPaths for the three units (the canary postflight was `Environment=[]` and `DropInPaths=[]`).
-2. Stop `griff_engine_btc`, `griff_engine_us100`, and `griff_engine_gold`. Confirm `systemctl is-active` is inactive for each. Confirm London and Omni are inactive.
-3. Start the hub from the durable checkout (the live-orders example unit, or the same command by hand). Do not start it from `/tmp`.
-4. Health before the engines attach: `mode` live, `orders_mode` live, `orders_live` true, `synchronize_calls` 1 once it has connected, `connected` true. The Stage 3 probe saw `synchronize_calls` 0 until the first sync, then 1. It must not climb once per engine.
-5. Start the three engines **one by one**. After each start, health `clients` includes that engine and `synchronize_calls` is still 1. `local_synchronize_calls` on the client stays 0.
-6. Confirm a candle read for BTCUSD, US100.cash, and XAUUSD comes back through the hub (`broker_synchronize_calls` stays 1).
-7. Leave the drop-ins in place only if that health check held. If `synchronize_calls` climbs once per engine, the engines are still synchronizing themselves. Roll back.
+Sequence reported: stop the three Griff units, cooldown ~25s, `systemctl enable --now odin-metaapi-hub`, then start BTC, then US100, then Gold. After each start, `clients` grew and `synchronize_calls` stayed 1.
 
 #### Rollback
 
-Fast path. No git revert is required when the only production change was the hub unit and the engine drop-ins. Strategy files are unchanged by this documentation, and the canary did not edit them.
+Use this order. Removing the drop-ins is enough to leave the factory on `MetaApiWrapper`, because `hub_mode()` is off when `ODIN_METAAPI_HUB` is unset. Restoring the `.pre-hub-20261001` sources is optional and is not required for that env-off path.
 
-1. Stop `griff_engine_btc`, `griff_engine_us100`, and `griff_engine_gold`.
-2. Remove the drop-ins so Environment and DropInPaths are empty again (the hub-free state from the canary postflight). `daemon-reload` after the files are gone.
-3. Stop the hub unit if one was installed: `systemctl disable --now` that unit and delete the unit file. If the hub was started by hand, stop it by the recorded PID (next section). Confirm the socket `/run/odin/metaapi-hub.sock` is gone.
-4. Start the three engines on the old path, with no `ODIN_METAAPI_HUB`. Confirm the units are active and hub-free.
-5. Journals should show each engine on its own MetaAPI sync again. That is the known TooManyRequests behavior. It is the rollback. Do not invent a third topology during the incident.
+```bash
+# 1. Stop three Griff
+sudo systemctl stop griff_engine_btc griff_engine_us100 griff_engine_gold
 
-PID check, including when SIGTERM does not exit (the Stage 3 hub needed KILL after TERM because the SDK write loop hung):
+# 2. Remove hub drop-ins; daemon-reload
+sudo rm -f /etc/systemd/system/griff_engine_btc.service.d/hub.conf
+sudo rm -f /etc/systemd/system/griff_engine_us100.service.d/hub.conf
+sudo rm -f /etc/systemd/system/griff_engine_gold.service.d/hub.conf
+sudo systemctl daemon-reload
+
+# 3. Stop/disable hub (by systemd only — never pkill -f)
+sudo systemctl stop odin-metaapi-hub
+sudo systemctl disable odin-metaapi-hub
+# optional: sudo systemctl kill -s TERM odin-metaapi-hub  # only if needed; prefer stop
+# kill by recorded PID if required: sudo kill <MainPID from systemctl show>
+
+# 4. Optional: restore pre-hub engine sources
+# sudo -u solveetcoagula cp -a /home/solveetcoagula/odin_ftmo/griff_engine_live.py.pre-hub-20261001 /home/solveetcoagula/odin_ftmo/griff_engine_live.py
+# sudo -u solveetcoagula cp -a /home/solveetcoagula/odin_ftmo/griff_engine_us100.py.pre-hub-20261001 /home/solveetcoagula/odin_ftmo/griff_engine_us100.py
+# sudo -u solveetcoagula cp -a /home/solveetcoagula/odin_ftmo/griff_engine_gold.py.pre-hub-20261001 /home/solveetcoagula/odin_ftmo/griff_engine_gold.py
+# (Not required for env-off rollback: factory defaults to MetaApiWrapper when ODIN_METAAPI_HUB unset)
+
+# 5. Start three Griff without hub env
+sudo systemctl start griff_engine_btc griff_engine_us100 griff_engine_gold
+
+# 6. Confirm old path: journals show MetaApiWrapper / local sync (not hub-backed)
+journalctl -u griff_engine_btc -n 40 --no-pager
+```
+
+Do not disconnect NordVPN, `openvpn@asterdex`, or `odin_daemon`. Never `pkill -f`. If `systemctl stop` does not exit the hub, liveness is `ps -p` on the MainPID from `systemctl show` (2775860 at report time). `kill -0` across users returns EPERM and is not proof the process died. The Stage 3 hub needed KILL after TERM; that signal still targets only the recorded PID:
 
 ```sh
 ps -p "$HUB_PID" -o pid,user,cmd
@@ -146,41 +157,35 @@ sudo kill "$HUB_PID"
 ps -p "$HUB_PID" -o pid,user,cmd
 # if it is still there:
 sudo kill -KILL "$HUB_PID"
-ps -p "$HUB_PID" -o pid,user,cmd
 ```
 
-Use the PID you recorded when the hub started. `ps -p` is the liveness check. `kill -0` across users returns EPERM and is not proof the process died. Never `pkill -f`. Never kill a PID you did not record for this hub.
-
-Git: the canary code is `bcd48ff0b6900c24ce2bb861f9b7410740507cc4`. Later commits on this branch document evidence and this procedure. Reverting them does not restore or remove strategy behavior. Abandoning the hub is the systemd rollback above.
+After this rollback each engine synchronizes itself again. That is the known TooManyRequests behavior. It is the rollback. Git revert of this documentation does not undo the unit files on the VM. The systemd steps above do.
 
 ## Production checklist
 
-Stage 2 and the Stage 3 canary are done. Stage 4 is approved and still operator-executed.
+Stages 1–4 are recorded PASS from operator reports. This commit did not re-check the host.
 
-- [x] Odin approved production cutover in writing on 2026-10-01, after the evidence below was documented for rollback.
+- [x] Odin approved production cutover on 2026-10-01.
 - [x] Stage 1 shadow passed on matt-berserker.
 - [x] Stage 2 read-only live passed: `synchronize_calls=1`, orders deny, engines restored hub-free, ~148s downtime, SHA `bcd48ff`.
-- [x] Stage 3 safe canary passed: orderIds 172310476, 172310493, 172310505, one sync, no leftover orders or positions, engines restored hub-free. Evidence file in this tree.
-- [ ] Stage 4 itself has not been performed by the documentation commit. The operator still has to do the procedure above.
-- [ ] Durable checkout exists and is not under `/tmp`. Live tree was not git-pulled for the canary; do not assume `/home/solveetcoagula/odin_ftmo` contains `metaapi_hub`.
-- [ ] Engine processes that start are the hub-aware modules. `PYTHONPATH` includes that checkout. Config paths stay the existing files.
-- [ ] No `metaapi.token` value is in the diff (`git diff` / `git log -p`).
-- [ ] `setup_gold_service.sh`, `setup_us100_service.sh`, `ftmo_hft_omni.service`, and `ftmo_london_reversal.service` do not grow a hub flag. The drop-in is separate and removable.
-- [ ] Shadow and live-readonly example units were not installed as the trader. Only the live-orders example has the four interlocks, and only as the intentional cutover.
-- [ ] London and Omni are inactive for the window.
-- [ ] The three Griff units (`griff_engine_btc`, `griff_engine_us100`, `griff_engine_gold`) are stopped before the live hub starts.
-- [ ] Hub command is `--mode live --orders live --enable-live-orders` with `ODIN_METAAPI_HUB_ORDERS=live`.
-- [ ] Health after all three engines attach: `synchronize_calls` is 1.
-- [ ] Rollback PID is the one recorded at start. Liveness is `ps -p`. No `kill -0` across users. No `pkill -f`.
+- [x] Stage 3 safe canary passed: orderIds 172310476, 172310493, 172310505, one sync, no leftover orders or positions, engines restored hub-free.
+- [x] Stage 4 production cutover PASS ~12:44–12:49 EDT. Hub SHA `bcd48ff`. `odin-metaapi-hub` enabled. Drop-ins `hub.conf`. Durable path `/home/solveetcoagula/odin-ftmo-hub`. Backups `.pre-hub-20261001`.
+- [x] Health: `synchronize_calls=1`, `orders_live=true`, clients btc/gold/us100, `reconnects=0` over 120s soak, equity 94061.91, no `TooManyRequests` in the first ~3 minutes.
+- [x] London, Omni, and `ftmo_omnibus` inactive during the window. `nordvpnd`, `openvpn@asterdex`, and `odin_daemon` left active.
+- [x] Rollback is stop Griff, remove the three `hub.conf` drop-ins, `daemon-reload`, stop and disable `odin-metaapi-hub`, start Griff. Factory stays off when the env is gone. Source restore from `.pre-hub-20261001` is optional.
+- [x] No `metaapi.token` value is in this documentation. The report records that the token was not logged.
 
 ## VM path
 
 | Item | Value |
 | --- | --- |
 | Host | `matt-berserker`, zone `us-central1-a` |
-| Live tree | `/home/solveetcoagula/odin_ftmo` (not git-pulled for the canary) |
+| Live tree | `/home/solveetcoagula/odin_ftmo` |
 | Config | `/home/solveetcoagula/odin_ftmo/config_us100.json` (not in git) |
-| Canary sandbox | `/tmp/odin-ftmo-hub-shadow` (not for Stage 4) |
-| Durable checkout to create | `/home/solveetcoagula/odin-metaapi-hub` (recommended; not verified by this commit) |
-| Units | `griff_engine_btc`, `griff_engine_us100`, `griff_engine_gold` |
+| Canary sandbox | `/tmp/odin-ftmo-hub-shadow` (Stage 3 only) |
+| Durable hub package | `/home/solveetcoagula/odin-ftmo-hub` |
+| Hub unit | `/etc/systemd/system/odin-metaapi-hub.service` (enabled) |
+| Drop-ins | `griff_engine_btc`, `griff_engine_us100`, `griff_engine_gold` → `service.d/hub.conf` |
+| Not in this cutover | `griff_engine_xau.service` (the report says it exists) |
 | Socket | `/run/odin/metaapi-hub.sock` |
+| Hub MainPID at report | 2775860 |

@@ -147,3 +147,43 @@ Downtime:
 3. The hub needed KILL after TERM (SDK write-loop hang on shutdown). The signal still targeted only the recorded PID.
 
 `nordvpn`, `openvpn@asterdex`, and `odin_daemon` stayed active. London and Omni stayed inactive. Secrets were not logged (token length 2589 only). No permanent `ODIN_METAAPI_HUB` was left on the production units.
+
+## Stage 4 — production cutover on matt-berserker
+
+**COMPLETED / PASS.** Operator report for 2026-10-01 ~12:44–12:49 EDT. Full copy, including the installed unit and the exact rollback: [evidence/2026-10-01-stage4-cutover.md](evidence/2026-10-01-stage4-cutover.md). This commit did not run the cutover and did not inspect the VM afterward.
+
+| Item | Reported |
+| --- | --- |
+| Hub SHA | `bcd48ff0b6900c24ce2bb861f9b7410740507cc4` |
+| Stop Griff | 2026-10-01T16:44:58Z (12:44:58 EDT) |
+| Hub started | 2026-10-01T16:46:08Z (12:46:08 EDT) |
+| Health time | 2026-10-01T16:49:27Z |
+| Report written | 2026-10-01T16:49:38Z (12:49:38 EDT) |
+| Unit | `odin-metaapi-hub` active and enabled, MainPID 2775860 |
+| Durable path | `/home/solveetcoagula/odin-ftmo-hub` (`metaapi_hub/` + `HUB_SHA.txt`) |
+| Live-tree copy | `/home/solveetcoagula/odin_ftmo/metaapi_hub/` |
+| Drop-ins | `griff_engine_{btc,us100,gold}.service.d/hub.conf` |
+| Backups | `.pre-hub-20261001` on `griff_engine_live.py`, `griff_engine_us100.py`, `griff_engine_gold.py` |
+| Account | `a60dfd98-8a34-4c1b-9f2c-b40cdcc2c3bf` |
+| Equity | 94061.91 (`live_state.json`) |
+
+Health at 16:49:27Z:
+
+| Field | Value |
+| --- | --- |
+| mode / orders_mode / orders_live | live / live / true |
+| connected | true |
+| synchronize_calls | 1 |
+| broker_synchronize_calls | 1 |
+| sync_attempts | 1 |
+| reconnects | 0 |
+| clients | btc, gold, us100 (`client_count` 3) |
+| candle_fetches / broker_candle_calls | 2 / 2 |
+| broker_order_calls / broker_mutation_calls | 0 / 0 |
+| max_rpc_depth | 1 |
+
+120s soak held `synchronize_calls=1`, `reconnects=0`, `orders_live=true`. Journals for the first ~3 minutes had no `TooManyRequests`. Each engine logged that it attached without a local synchronization. Preflight equity was the same 94061.91. `nordvpnd`, `openvpn@asterdex`, and `odin_daemon` stayed active. `ftmo_london_reversal`, `ftmo_hft_omni`, and `ftmo_omnibus` stayed inactive. `griff_engine_xau.service` was not part of the cutover.
+
+Hub `PYTHONPATH` is `/home/solveetcoagula/odin-ftmo-hub`. Engine drop-in `PYTHONPATH` is `/home/solveetcoagula/odin_ftmo`. Both are what the report installed. The token was not logged.
+
+Rollback, if needed: stop the three Griff units, remove the three `hub.conf` drop-ins, `daemon-reload`, stop and disable `odin-metaapi-hub`, start the three Griff units. With `ODIN_METAAPI_HUB` unset, the factory returns `MetaApiWrapper`. Copying the `.pre-hub-20261001` files back is optional and is not required for that path. Never `pkill -f`. Cross-user PID checks use `ps -p` and `sudo kill` of the recorded PID.

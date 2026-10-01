@@ -97,7 +97,7 @@ That PID is the one you wrote down. Do not substitute a name search.
 
 - Do not `systemctl enable` or `systemctl start` the shadow or live-readonly files in `deploy/examples/` as a trader. They stay on `--orders deny`.
 - Do not copy those two files to `/etc/systemd/system` on `matt-berserker`.
-- `deploy/examples/odin-metaapi-hub.live-orders.service.example` is the only example with `--orders live`, `--enable-live-orders`, and `ODIN_METAAPI_HUB_ORDERS=live`. Installing it is the Stage 4 cutover in [CUTOVER.md](CUTOVER.md), not a rehearsal.
+- `deploy/examples/odin-metaapi-hub.live-orders.service.example` is the only example with `--orders live`, `--enable-live-orders`, and `ODIN_METAAPI_HUB_ORDERS=live`. Stage 4 already ran from the unit recorded in [evidence/2026-10-01-stage4-cutover.md](evidence/2026-10-01-stage4-cutover.md) (`WorkingDirectory` on the live tree, `PYTHONPATH=/home/solveetcoagula/odin-ftmo-hub`). Do not copy the example over that unit. Rollback is in [CUTOVER.md](CUTOVER.md).
 - Do not pass `--orders live` or `--enable-live-orders` unless that same command also has `--mode live` and the process environment has `ODIN_METAAPI_HUB_ORDERS=live`, and the three Griff units are already stopped.
 - Do not export `ODIN_METAAPI_HUB=on` on `griff_engine_btc`, `griff_engine_us100`, or `griff_engine_gold` while those processes are still the ones synchronizing. Stop them first. The unit names are those three, not `griff_engine` / `griff_engine_xau`.
 - Do not commit `config_us100.json` or any other file with `metaapi.token`.

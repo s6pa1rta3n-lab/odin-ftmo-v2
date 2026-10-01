@@ -52,4 +52,4 @@ Conclusion: the hypothesis holds. The hub is the fix we implemented. We did not 
 
 ## Cutover approval
 
-Odin approved production cutover on 2026-10-01 after Stage 2 (read-only live) and the Stage 3 safe canary were documented. The approval is recorded in [CUTOVER.md](CUTOVER.md) so the steps and the rollback are in git. The commit that recorded it does not install units or change the VM. Strategy modules are unchanged by that documentation. The hub remains plumbing in front of the existing engines.
+Odin approved production cutover on 2026-10-01 after Stage 2 (read-only live) and the Stage 3 safe canary were documented. Operators then reported Stage 4 PASS the same day (~12:44–12:49 EDT). The approval, the installed unit, and the rollback are in [CUTOVER.md](CUTOVER.md) and [evidence/2026-10-01-stage4-cutover.md](evidence/2026-10-01-stage4-cutover.md). The commits that recorded this do not install units or change the VM. The report says strategy and config JSON were unchanged and only factory wiring was added. With `ODIN_METAAPI_HUB` unset, that factory returns `MetaApiWrapper`. The hub remains plumbing in front of the existing engines.
