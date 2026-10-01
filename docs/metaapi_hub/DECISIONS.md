@@ -40,6 +40,8 @@ Conclusion: the hypothesis holds. The hub is the fix we implemented. We did not 
 - Candle cache of 5 seconds and four attempts on 504, one flight for all clients.
 - Timeouts stay timeouts. They do not open a new synchronization. Disconnects do, once, after closing the old slot.
 - Hub shutdown closes idle client sockets. `Server.wait_closed()` would otherwise block until every engine disconnects, including on SIGTERM.
+- Python 3.9 creates `asyncio.Lock` against the current loop. `asyncio.run` then clears that loop, so the next constructor crashed with "no current event loop". Locks are created on first use. This does not change who is allowed to synchronize or send orders.
+- Tests must not assume the SDK is absent. `SDK_MISSING` is forced by hiding `metaapi_cloud_sdk` so a VM that has the package does not open a real client. Off mode, when `MetaApiWrapper` imports, must return that class and must not call `MetaApi(token)` from the test.
 
 ## Encounters
 

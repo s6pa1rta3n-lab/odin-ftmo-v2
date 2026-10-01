@@ -15,6 +15,7 @@ import time
 import uuid
 from typing import Any, Awaitable, Callable
 
+from metaapi_hub.locks import LazyLock
 from metaapi_hub.errors import (
     DryRunOrderError,
     GatewayTimeoutError,
@@ -73,9 +74,9 @@ class SyncOwner:
         self.cache_hits = 0
         self.duplicate_suppressions = 0
         self._epoch = 0
-        self._sync_lock = asyncio.Lock()
-        self._rpc_lock = asyncio.Lock()
-        self._flight_lock = asyncio.Lock()
+        self._sync_lock = LazyLock()
+        self._rpc_lock = LazyLock()
+        self._flight_lock = LazyLock()
         self._inflight: dict[tuple, asyncio.Task] = {}
         self._cache: dict[tuple, tuple[float, list]] = {}
         self._recent_mutations: dict[tuple, tuple[float, dict]] = {}

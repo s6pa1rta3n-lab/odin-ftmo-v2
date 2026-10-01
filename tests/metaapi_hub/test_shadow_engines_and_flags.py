@@ -17,14 +17,87 @@ from metaapi_hub.shadow_probe import run_shadow_probe
 
 
 def test_default_flag_is_off_and_unknown_values_stay_off(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Off mode is the direct wrapper, including when that module is installed.
+
+    Constructing the real ``MetaApiWrapper`` calls ``MetaApi(token)``. This
+    test substitutes a stub, and separately blocks the import, so neither
+    host opens a client. Shadow mode still returns the hub adapter.
+    """
+
+    import sys
+    import types
+
     assert DEFAULT_HUB_MODE == "off"
     assert hub_mode() == "off"
     monkeypatch.setenv("ODIN_METAAPI_HUB", "please")
     assert hub_mode() == "off"
     monkeypatch.setenv("ODIN_METAAPI_HUB", "0")
     assert hub_mode() == "off"
+
+    stub = types.ModuleType("MetaApiWrapper")
+
+    class SentinelWrapper:
+        def __init__(self, token: str, account_id: str) -> None:
+            self.account_id = account_id
+            self.connection = None
+            self.api = None
+            self.saw_token = token
+
+    stub.MetaApiWrapper = SentinelWrapper
+    monkeypatch.setitem(sys.modules, "MetaApiWrapper", stub)
+    direct = build_execution_wrapper("not-used-for-network", "acct-1", engine_name="btc")
+    assert isinstance(direct, SentinelWrapper)
+    assert direct.connection is None
+    assert direct.api is None
+    assert not isinstance(direct, HubBackedWrapper)
+
+    monkeypatch.setitem(sys.modules, "MetaApiWrapper", None)
     with pytest.raises(RuntimeError, match="MetaApiWrapper module not available"):
-        build_execution_wrapper("token", "account", engine_name="btc")
+        build_execution_wrapper("not-used-for-network", "acct-1", engine_name="btc")
+
+    monkeypatch.setenv("ODIN_METAAPI_HUB", "shadow")
+    hub_wrapper = build_execution_wrapper(
+        "not-used-for-network",
+        "acct-1",
+        engine_name="btc",
+        socket_path="/tmp/odin-metaapi-hub-test.sock",
+    )
+    assert isinstance(hub_wrapper, HubBackedWrapper)
+    assert hub_wrapper.client.local_synchronize_calls == 0
+
+
+def test_off_mode_uses_installed_metaapi_wrapper_without_constructing_metaapi(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When the real wrapper imports, off mode must return it and not connect.
+
+    ``__init__`` is replaced so ``MetaApi(token)`` is not called. Hosts without
+    the SDK skip this assertion; the stub test above still covers them.
+    """
+
+    import sys
+
+    try:
+        import MetaApiWrapper as real_mod
+    except ImportError:
+        pytest.skip("MetaApiWrapper is not importable in this environment")
+
+    def _safe_init(self, token: str, account_id: str) -> None:
+        self.account_id = account_id
+        self.connection = None
+        self.account = None
+        self.api = None
+        self._constructed_without_sdk_call = True
+
+    monkeypatch.setattr(real_mod.MetaApiWrapper, "__init__", _safe_init)
+    monkeypatch.setitem(sys.modules, "MetaApiWrapper", real_mod)
+    monkeypatch.delenv("ODIN_METAAPI_HUB", raising=False)
+    wrapper = build_execution_wrapper("not-used-for-network", "acct-1", engine_name="us100")
+    assert isinstance(wrapper, real_mod.MetaApiWrapper)
+    assert wrapper.connection is None
+    assert wrapper.api is None
+    assert wrapper._constructed_without_sdk_call is True
+    assert not isinstance(wrapper, HubBackedWrapper)
 
 
 def test_symbol_mapping_matches_the_existing_wrapper() -> None:

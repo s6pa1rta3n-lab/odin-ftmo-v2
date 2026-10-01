@@ -16,6 +16,7 @@ from metaapi_hub.errors import (
     GatewayTimeoutError,
     HubError,
     NotConnectedError,
+    OrdersDisabledError,
     TooManyRequestsError,
     classify_metaapi_error,
 )
@@ -90,19 +91,74 @@ def test_classify_metaapi_errors() -> None:
     assert timed.code == "TIMEOUT"
 
 
-def test_metaapi_broker_does_not_connect_or_log_the_token_without_the_sdk() -> None:
+def test_metaapi_broker_redacts_token_and_refuses_a_masked_sdk_import() -> None:
+    """SDK_MISSING must be proven without calling MetaAPI.
+
+    On a host where ``metaapi_cloud_sdk`` is installed, calling the real
+    ``synchronize`` would open a client. This test hides that module so the
+    refusal path runs everywhere, and the token never appears in errors.
+    """
+
     async def _run() -> None:
+        import sys
+        from unittest.mock import patch
+
         secret = "super-secret-token-value"
         broker = MetaApiBroker(secret, "account-id")
         assert secret not in repr(broker)
-        with pytest.raises(HubError) as caught:
-            await broker.synchronize()
+        assert broker.connected is False
+        assert broker.order_calls == 0
+        with patch.dict(sys.modules, {"metaapi_cloud_sdk": None}):
+            with pytest.raises(HubError) as caught:
+                await broker.synchronize()
         assert caught.value.code == "SDK_MISSING"
         assert secret not in str(caught.value)
         assert broker.connected is False
+        assert broker.synchronize_calls == 0
         assert broker.order_calls == 0
+        assert broker.mutation_calls == 0
 
     asyncio.run(_run())
+
+
+def test_owner_built_outside_a_loop_still_syncs_once_and_denies_orders() -> None:
+    """Python 3.9 binds asyncio primitives to the loop that exists at construction.
+
+    ``asyncio.run`` clears that loop. Building the broker afterwards must still
+    synchronize once and must still refuse orders.
+    """
+
+    async def _warm_up() -> None:
+        await asyncio.sleep(0)
+
+    asyncio.run(_warm_up())
+
+    from metaapi_hub.owner import SyncOwner
+
+    broker = InMemoryBroker()
+    owner = SyncOwner(broker, mode="shadow", orders_mode="deny", backoff_base=0.0)
+
+    async def _use() -> None:
+        await owner.ensure_connected()
+        info = await owner.read("get_account_information")
+        assert info["equity"] == 100000.0
+        with pytest.raises(OrdersDisabledError):
+            await owner.mutate(
+                "create_market_order",
+                {
+                    "symbol": "BTCUSD",
+                    "side": "BUY",
+                    "volume": 0.01,
+                    "comment": "GRIFF_BTC",
+                },
+                engine="btc",
+            )
+        assert broker.synchronize_calls == 1
+        assert broker.order_calls == 0
+        assert broker.mutation_calls == 0
+        assert owner.orders_are_live() is False
+
+    asyncio.run(_use())
 
 
 def test_normalize_candles_sorts_and_keeps_the_newest_limit() -> None:

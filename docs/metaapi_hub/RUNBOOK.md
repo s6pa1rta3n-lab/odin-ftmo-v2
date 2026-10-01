@@ -10,7 +10,31 @@ sh scripts/run_metaapi_hub_tests.sh
 
 That runs `python3 -m pytest tests/metaapi_hub -q` and `python3 -m metaapi_hub.shadow_probe`. The probe exits 0 only when three clients subscribed, `synchronize_calls` is 1, and no order method reached the broker. It prints JSON. The note in that JSON says not to cut over.
 
-`pytest` with no arguments still uses `pytest.ini`, which points at `tests/e2e`. Those tests are not the hub suite. They expect `config_us100.json` and the SDK, which this checkout does not have.
+`pytest` with no arguments still uses `pytest.ini`, which points at `tests/e2e`. Those tests are not the hub suite. They expect `config_us100.json`.
+
+## Re-run on matt-berserker
+
+Stage 1 shadow already passed on the VM. Re-run **only the test script** after updating the checkout that produced the 24/27 result. Do not deploy this branch onto the live tree, do not `systemctl` anything, and do not start `--mode live`.
+
+Leave `ODIN_METAAPI_HUB` and `ODIN_METAAPI_HUB_ORDERS` unset. The script unsets them itself. Python on that host is 3.9 and already has `metaapi-cloud-sdk`; the suite is written for that. It still does not call `synchronize()` on the real SDK and it does not construct a live `MetaApi` client.
+
+```sh
+cd /path/to/the/checkout/that/ran/the/tests
+git pull origin cursor/metaapi-hub-230c
+unset ODIN_METAAPI_HUB
+unset ODIN_METAAPI_HUB_ORDERS
+sh scripts/run_metaapi_hub_tests.sh
+```
+
+If that path is `/home/solveetcoagula/odin_ftmo` and the Griff units are running from it, do not checkout or pull there. Clone or copy the branch somewhere else and run the script in that copy. A pull into the live working directory is a deploy.
+
+Expect `python 3.9.x`, pytest all passed, and `shadow probe ok 1 orders 0`. `orders_live` in the probe JSON is false.
+
+The three failures from the 24/27 run were:
+
+1. Python 3.9 binds `asyncio.Lock` at construction. After `asyncio.run()`, building a broker outside a loop raised "no current event loop". Locks are now created on first use. A test builds the owner after `asyncio.run()` and still expects one sync and zero orders.
+2. `MetaApiBroker.synchronize` was expected to raise `SDK_MISSING`. With the SDK installed that would have opened a real client. The test now hides `metaapi_cloud_sdk` and still requires `SDK_MISSING`, a redacted token, and zero orders.
+3. Off mode was expected to fail importing `MetaApiWrapper`. On the VM that import succeeds. Off mode must return the direct wrapper and must not connect; the test stubs `__init__` so `MetaApi(token)` is not called. A missing wrapper still raises and does not fall through to the hub.
 
 ## Shadow hub
 

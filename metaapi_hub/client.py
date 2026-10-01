@@ -9,6 +9,7 @@ import uuid
 from typing import Any
 
 from metaapi_hub.errors import HubRequestError
+from metaapi_hub.locks import LazyLock
 from metaapi_hub.protocol import FORBIDDEN_CLIENT_METHODS, dumps, loads
 
 log = logging.getLogger("odin.metaapi_hub.client")
@@ -27,7 +28,7 @@ class HubClient:
         self._reader: Any = None
         self._writer: Any = None
         self._reader_task: asyncio.Task | None = None
-        self._write_lock = asyncio.Lock()
+        self._write_lock = LazyLock()
         self._pending: dict[str, asyncio.Future] = {}
         self._closed = False
 

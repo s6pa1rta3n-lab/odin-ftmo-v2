@@ -2,6 +2,10 @@
 
 Recorded 2026-10-01 on this branch after the shutdown fix (idle client sockets are closed so `wait_closed` cannot hang).
 
+A later VM run of the same script on matt-berserker (Python 3.9, MetaAPI SDK installed) was 24/27. The three failures were environment checks, not sync or order safety. They are fixed on this branch: lazy asyncio locks, `SDK_MISSING` forced without importing the real SDK, and off-mode assertions that accept an installed `MetaApiWrapper` without constructing `MetaApi`. Re-run steps are in [RUNBOOK.md](RUNBOOK.md). Do not deploy and do not enable the live hub to re-run them.
+
+Local check after that fix, Python 3.12: `28 passed, 1 skipped` when `MetaApiWrapper` cannot be imported. With a stub `metaapi_cloud_sdk` whose `MetaApi()` raises if called: `29 passed`. The installed-wrapper test ran, and the masked-SDK test still returned `SDK_MISSING` with zero orders. This checkout has no Python 3.9 interpreter; the VM re-run is the 3.9 confirmation.
+
 Command:
 
 ```sh
@@ -64,6 +68,9 @@ The shadow probe did not contact MetaAPI. Its snapshot:
 - `GriffLiveEngine.run_self_test` against the shadow hub sends no orders.
 - Installer scripts and the existing unit files do not mention the hub. Example `ExecStart` lines do not contain `--orders live` or `--enable-live-orders`.
 - CLI rejects live orders unless every interlock is present.
+- Python 3.9: an owner built after `asyncio.run()` still synchronizes once and denies orders.
+- `SDK_MISSING` is forced by hiding the SDK module, so an installed SDK cannot turn the test into a live synchronize.
+- Off mode returns the direct wrapper when that module imports, and raises when the import is blocked. Neither path builds `HubBackedWrapper` or calls `MetaApi(token)`.
 
 ## Encounter during the run
 

@@ -13,6 +13,7 @@ import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any, Awaitable, Callable
 
+from metaapi_hub.locks import LazyLock
 from metaapi_hub.errors import (
     GatewayTimeoutError,
     HubError,
@@ -45,7 +46,7 @@ class InMemoryBroker:
         self.sync_delay = sync_delay
         self.rpc_delay = rpc_delay
         self._sleep = sleep or asyncio.sleep
-        self._mu = asyncio.Lock()
+        self._mu = LazyLock()
         self._sync_inflight = 0
         self._holders = 0
         self.connected = False
