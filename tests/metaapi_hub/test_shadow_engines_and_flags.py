@@ -127,6 +127,10 @@ def test_griff_self_test_runs_against_shadow_without_a_second_sync(monkeypatch: 
     asyncio.run(_run())
 
 
+def _exec_lines(text: str) -> str:
+    return "\n".join(line.strip() for line in text.splitlines() if line.strip().startswith("ExecStart="))
+
+
 def test_repo_service_installers_do_not_enable_the_hub() -> None:
     root = Path(__file__).resolve().parents[2]
     watched = [
@@ -144,9 +148,12 @@ def test_repo_service_installers_do_not_enable_the_hub() -> None:
     readonly = (root / "deploy" / "examples" / "odin-metaapi-hub.live-readonly.service.example").read_text(encoding="utf-8")
     for text in (example, readonly):
         assert "DO NOT" in text
-        assert "--enable-live-orders" not in text
-        assert "--orders live" not in text
-    assert "--mode shadow" in example
-    assert "--orders deny" in example
-    assert "--mode live" in readonly
-    assert "--orders deny" in readonly
+        executed = _exec_lines(text)
+        assert "--enable-live-orders" not in executed
+        assert "--orders live" not in executed
+        assert "ODIN_METAAPI_HUB=on" not in text
+        assert "ODIN_METAAPI_HUB=1" not in text
+    assert "--mode shadow" in _exec_lines(example)
+    assert "--orders deny" in _exec_lines(example)
+    assert "--mode live" in _exec_lines(readonly)
+    assert "--orders deny" in _exec_lines(readonly)

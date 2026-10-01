@@ -39,6 +39,7 @@ Conclusion: the hypothesis holds. The hub is the fix we implemented. We did not 
 - Duplicate-order window of 3 seconds for identical mutations from the same engine name. This does not replace the engines' own position checks. A process restart gets a new chance to send. That residual risk is the same one `update_log.md` hit, and the hub does not hide it.
 - Candle cache of 5 seconds and four attempts on 504, one flight for all clients.
 - Timeouts stay timeouts. They do not open a new synchronization. Disconnects do, once, after closing the old slot.
+- Hub shutdown closes idle client sockets. `Server.wait_closed()` would otherwise block until every engine disconnects, including on SIGTERM.
 
 ## Encounters
 

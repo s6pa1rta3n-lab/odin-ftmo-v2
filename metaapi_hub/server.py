@@ -23,6 +23,7 @@ class HubServer:
         self.owner = owner
         self.socket_path = socket_path
         self._server: Any = None
+        self._writers: set[Any] = set()
 
     async def start(self) -> None:
         import asyncio
@@ -42,8 +43,20 @@ class HubServer:
         )
 
     async def close(self) -> None:
+        """Stop accepting clients and drop idle sockets.
+
+        ``wait_closed`` would otherwise block until every engine disconnects.
+        Shutdown must not depend on the engines exiting first.
+        """
+
         if self._server is not None:
             self._server.close()
+        for writer in list(self._writers):
+            try:
+                writer.close()
+            except Exception as exc:
+                log.warning("Error closing hub client: %s", exc)
+        if self._server is not None:
             await self._server.wait_closed()
             self._server = None
         if os.path.exists(self.socket_path):
@@ -54,6 +67,7 @@ class HubServer:
 
     async def _handle(self, reader: Any, writer: Any) -> None:
         client_id: str | None = None
+        self._writers.add(writer)
         try:
             while True:
                 line = await reader.readline()
@@ -75,6 +89,7 @@ class HubServer:
                 writer.write(dumps(response))
                 await writer.drain()
         finally:
+            self._writers.discard(writer)
             self.owner.unregister(client_id)
             writer.close()
             try:
