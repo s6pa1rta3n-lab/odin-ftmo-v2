@@ -20,7 +20,7 @@ import time
 from datetime import datetime
 import pytz
 
-from MetaApiWrapper import MetaApiWrapper
+from metaapi_hub.factory import build_execution_wrapper
 
 logging.basicConfig(
     level=logging.INFO,
@@ -32,7 +32,8 @@ logger = logging.getLogger("US100_Engine")
 class US100Engine:
     def __init__(self, token, account_id, config_path: str = "config_us100.json"):
         self.config_path = config_path
-        self.wrapper = MetaApiWrapper(token, account_id)
+        # Default ODIN_METAAPI_HUB=off keeps the direct MetaApiWrapper path.
+        self.wrapper = build_execution_wrapper(token, account_id, engine_name="us100")
         self.is_running = False
         self.state = "SEARCHING"
         self.active_position = None

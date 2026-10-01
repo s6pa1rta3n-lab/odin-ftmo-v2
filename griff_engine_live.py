@@ -30,6 +30,8 @@ try:
 except ImportError:
     MetaApiWrapper = None
 
+from metaapi_hub.factory import build_execution_wrapper, engine_name_for_symbol, hub_mode
+
 try:
     from metaapi_cloud_sdk.clients.timeout_exception import TimeoutException
 except ImportError:
@@ -487,12 +489,25 @@ class GriffLiveEngine:
         Returns:
             True if connection and balance validation succeed; False otherwise.
         """
-        if MetaApiWrapper is None:
+        if hub_mode() == "off" and MetaApiWrapper is None:
             logger.error("MetaApiWrapper module not available")
             return False
 
-        logger.info("Initializing MetaApiWrapper for account %s", self.account_id)
-        self.wrapper = MetaApiWrapper(self.token, self.account_id)
+        logger.info(
+            "Initializing execution wrapper for account %s (hub_mode=%s)",
+            self.account_id,
+            hub_mode(),
+        )
+        try:
+            # Default hub_mode is off, which keeps constructing MetaApiWrapper.
+            self.wrapper = build_execution_wrapper(
+                self.token,
+                self.account_id,
+                engine_name=engine_name_for_symbol(self.symbol),
+            )
+        except Exception as err:
+            logger.error("Failed to build execution wrapper: %s", err)
+            return False
 
         try:
             await self.wrapper.connect()

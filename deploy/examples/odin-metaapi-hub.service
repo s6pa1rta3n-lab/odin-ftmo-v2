@@ -1,0 +1,25 @@
+# DO NOT INSTALL. DO NOT ENABLE. DO NOT daemon-reload this into production.
+#
+# This file is an example for a future shadow rehearsal on matt-berserker.
+# Nothing in this repository copies it to /etc/systemd/system or starts it.
+# As written it cannot connect to MetaAPI and cannot place orders:
+#   --mode shadow --orders deny
+#
+# Do not cut over until Odin approves. See docs/metaapi_hub/CUTOVER.md.
+
+[Unit]
+Description=Odin MetaAPI hub SHADOW orders denied — DO NOT ENABLE until cutover is approved
+After=network.target
+
+[Service]
+Type=simple
+User=solveetcoagula
+WorkingDirectory=/home/solveetcoagula/odin_ftmo
+Environment=ODIN_METAAPI_HUB_ORDERS=deny
+ExecStart=/usr/bin/python3 -m metaapi_hub --mode shadow --orders deny --socket /run/odin/metaapi-hub.sock
+RuntimeDirectory=odin
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

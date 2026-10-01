@@ -1,0 +1,26 @@
+# DO NOT INSTALL. DO NOT ENABLE. DO NOT copy this onto matt-berserker until
+# Odin has approved a read-only cutover and the three engines are stopped.
+#
+# Starting this while griff_engine, griff_engine_btc, and griff_engine_xau are
+# still synchronizing themselves adds a fourth synchronization and makes
+# TooManyRequests worse.
+#
+# Orders stay denied. There is no --enable-live-orders and no --orders live.
+# Do not cut over until Odin approves. See docs/metaapi_hub/CUTOVER.md.
+
+[Unit]
+Description=Odin MetaAPI hub LIVE read-only orders denied — DO NOT ENABLE until Odin approves
+After=network.target
+
+[Service]
+Type=simple
+User=solveetcoagula
+WorkingDirectory=/home/solveetcoagula/odin_ftmo
+Environment=ODIN_METAAPI_HUB_ORDERS=deny
+ExecStart=/usr/bin/python3 -m metaapi_hub --mode live --orders deny --config /home/solveetcoagula/odin_ftmo/config_us100.json --account-id REPLACE_WITH_ACCOUNT_ID --socket /run/odin/metaapi-hub.sock
+RuntimeDirectory=odin
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

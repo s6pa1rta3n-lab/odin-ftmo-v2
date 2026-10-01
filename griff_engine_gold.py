@@ -20,7 +20,7 @@ import time
 from datetime import datetime
 import pytz
 
-from MetaApiWrapper import MetaApiWrapper
+from metaapi_hub.factory import build_execution_wrapper
 
 logging.basicConfig(
     level=logging.INFO,
@@ -32,7 +32,8 @@ logger = logging.getLogger("Gold_Engine")
 class GoldEngine:
     def __init__(self, token, account_id, config_path: str = "config_gold.json"):
         self.config_path = config_path
-        self.wrapper = MetaApiWrapper(token, account_id)
+        # Default ODIN_METAAPI_HUB=off keeps the direct MetaApiWrapper path.
+        self.wrapper = build_execution_wrapper(token, account_id, engine_name="gold")
         self.is_running = False
         self.state = "SEARCHING"
         self.eastern = pytz.timezone('US/Eastern')
