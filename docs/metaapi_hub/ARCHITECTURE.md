@@ -9,11 +9,13 @@ Three engine processes trade one MetaAPI account. Each process builds its own `M
 - `US100Engine` in `griff_engine_us100.py`
 - `GoldEngine` in `griff_engine_gold.py`
 
-`monitor_griff.py` watches the three units that run together on the VM:
+`monitor_griff.py` watches these unit names:
 
 - `griff_engine.service` — US100
 - `griff_engine_btc.service` — BTCUSD
 - `griff_engine_xau.service` — XAUUSD
+
+The Stage 3 canary on matt-berserker stopped and restored different unit names: `griff_engine_btc`, `griff_engine_us100`, and `griff_engine_gold`. Cutover and rollback use those three. Stopping the names in `monitor_griff.py` can leave `griff_engine_us100` or `griff_engine_gold` running. See [CUTOVER.md](CUTOVER.md).
 
 MetaAPI allows one synchronized copy of an account. The second and third `wait_synchronized()` receive TooManyRequests. `update_log.md` already records that failure in production: the error hid open positions and a duplicate US100 breakout was placed.
 

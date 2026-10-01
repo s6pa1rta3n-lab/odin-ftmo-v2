@@ -66,7 +66,7 @@ The shadow probe did not contact MetaAPI. Its snapshot:
 - `GriffLiveEngine` for BTCUSD, US100.cash, and XAUUSD, plus `US100Engine` and `GoldEngine`, one synchronization.
 - Hub outage does not fall back to a private sync.
 - `GriffLiveEngine.run_self_test` against the shadow hub sends no orders.
-- Installer scripts and the existing unit files do not mention the hub. Example `ExecStart` lines do not contain `--orders live` or `--enable-live-orders`.
+- Installer scripts and the London/Omni unit files do not mention the hub. The shadow and live-readonly example `ExecStart` lines do not contain `--orders live` or `--enable-live-orders`. The separate live-orders example must contain `--mode live`, `--orders live`, `--enable-live-orders`, and `ODIN_METAAPI_HUB_ORDERS=live`. Installing that file is the Stage 4 cutover, not the default.
 - CLI rejects live orders unless every interlock is present.
 - Python 3.9: an owner built after `asyncio.run()` still synchronizes once and denies orders.
 - `SDK_MISSING` is forced by hiding the SDK module, so an installed SDK cannot turn the test into a live synchronize.
@@ -75,3 +75,75 @@ The shadow probe did not contact MetaAPI. Its snapshot:
 ## Encounter during the run
 
 The first full run hung. `HubServer.close` called `wait_closed()` while Griff clients were still blocked in `readline`, so shutdown never returned. The fix closes those sockets before waiting. Re-run: 27 passed in 0.38s. That behavior is now what SIGTERM uses as well, so a hub stop does not wait for the engines to exit.
+
+## Stage 2 — read-only live on matt-berserker
+
+Operator summary of the successful window. This documentation commit did not re-run it and did not add measurements beyond what was reported. It is a different window from Stage 3.
+
+| Item | Reported |
+| --- | --- |
+| When | 2026-10-01, before the Stage 3 canary |
+| SHA | `bcd48ff0b6900c24ce2bb861f9b7410740507cc4` on `cursor/metaapi-hub-230c` |
+| Orders | deny |
+| `synchronize_calls` | 1 |
+| Engines after the window | restored hub-free |
+| Downtime | ~148s |
+
+No order ids, broker codes, or extra health fields were supplied for this stage. Do not read the Stage 3 table as Stage 2.
+
+## Stage 3 — safe live order canary on matt-berserker
+
+**PASS.** Operator report plus the uploaded probe for the same window. Full copy: [evidence/2026-10-01-stage3-canary.md](evidence/2026-10-01-stage3-canary.md). This commit did not execute the canary and did not inspect the VM afterward.
+
+| Item | Value |
+| --- | --- |
+| When | 2026-10-01 ~12:38–12:41 ET |
+| Probe | 2026-10-01T16:40:12Z → 2026-10-01T16:40:42Z |
+| SHA | `bcd48ff0b6900c24ce2bb861f9b7410740507cc4` |
+| Sandbox | `/tmp/odin-ftmo-hub-shadow` (live tree not git-pulled) |
+| Account | `a60dfd98-8a34-4c1b-9f2c-b40cdcc2c3bf` |
+| Verdict | PASS, `cleanup.clean` true, `fills` false |
+
+Orders were far-from-market BUY limits, 0.01 lots, then canceled. No market orders.
+
+| Symbol | Mark | Limit | orderId | Create | Cancel | Comment |
+| --- | --- | --- | --- | --- | --- | --- |
+| BTCUSD | 84231.67 | 10000.0 | 172310476 | TRADE_RETCODE_DONE / 10009 | CANCELED | hub-canary-btc |
+| US100.cash | 30363.28 | 10000.0 | 172310493 | TRADE_RETCODE_DONE / 10009 | CANCELED | hub-canary-us100 |
+| XAUUSD | 4165.37 | 1000.0 | 172310505 | TRADE_RETCODE_DONE / 10009 | CANCELED | hub-canary-gold |
+
+Post-cancel broker list: `orders=[]`, `positions=[]`. Equity 94061.91, SEARCHING, unchanged. Each engine row in the probe: `local_synchronize_calls` 0, `candles` 5.
+
+Health after the probe (`health_before` was `connected` false and `synchronize_calls` 0 because the probe attached before the sync):
+
+| Field | After |
+| --- | --- |
+| mode / orders_mode / orders_live | live / live / true |
+| connected | true |
+| synchronize_calls | 1 |
+| broker_synchronize_calls | 1 |
+| sync_attempts | 1 |
+| reconnects | 0 |
+| broker_order_calls | 3 |
+| broker_mutation_calls | 6 |
+| broker_candle_calls | 3 |
+| candle_fetches | 3 |
+| clients | probe-health only (`client_count` 1) |
+| max_rpc_depth | 1 |
+
+`broker_order_calls` 3 and `broker_mutation_calls` 6 are the three creates plus three cancels. They are not leftover working orders. The Griff engines were not hub clients in this probe; they were restored hub-free afterward (`griff_engine_btc`, `griff_engine_us100`, `griff_engine_gold` active, `Environment=[]`, `DropInPaths=[]`).
+
+Downtime:
+
+| Window | Engines down |
+| --- | --- |
+| v1 abort | ~96s |
+| Successful canary v2 | 135 seconds (stop ~16:38:42Z → restore ~16:40:53Z) |
+
+### Anomalies
+
+1. **Cross-user `kill -0` false abort.** From `reemanos8422`, `kill -0` on the `solveetcoagula` hub PID returns EPERM. The v1 script treated that as "PID gone" and aborted. A leftover hub then coexisted with the restored engines. Emergency cleanup stopped the engines, killed the hub by its recorded PID, and restored the engines before v2. Liveness is `ps -p`. Stop is `sudo kill` of that PID, then `sudo kill -KILL` of that same PID if TERM does not exit. Never `kill -0` across users. Never `pkill -f`.
+2. Launch-script `Permission denied` while rewriting a prior launch file did not block start.
+3. The hub needed KILL after TERM (SDK write-loop hang on shutdown). The signal still targeted only the recorded PID.
+
+`nordvpn`, `openvpn@asterdex`, and `odin_daemon` stayed active. London and Omni stayed inactive. Secrets were not logged (token length 2589 only). No permanent `ODIN_METAAPI_HUB` was left on the production units.

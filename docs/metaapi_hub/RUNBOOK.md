@@ -1,6 +1,6 @@
 # Runbook
 
-Do not run the live hub on `matt-berserker` as part of reviewing this branch. Shadow mode is local and does not open a MetaAPI connection.
+Shadow mode is local and does not open a MetaAPI connection. Reviewing this branch does not start the live hub. Stage 4 on the VM is a separate operator step, documented in [CUTOVER.md](CUTOVER.md), and this file does not perform it.
 
 ## Tests
 
@@ -52,7 +52,7 @@ python3 griff_engine_live.py --test --symbol BTCUSD
 
 `--test` on `GriffLiveEngine` runs the in-process self-test. Against a shadow hub it checks account info and candles and does not place an order. The self-test then closes only that engine's client.
 
-A shadow engine will be refused if you point it at `--mode live`. Use `ODIN_METAAPI_HUB=on` only after the cutover checklist, and only against a hub whose orders are still `deny`.
+A shadow engine will be refused if you point it at `--mode live`. `ODIN_METAAPI_HUB=on` against a hub that can trade is Stage 4 in [CUTOVER.md](CUTOVER.md), not a test command in this section.
 
 ## Health
 
@@ -68,10 +68,37 @@ Read `synchronize_calls`, `clients`, `orders_live`, and `broker_order_calls`. Se
 
 The hub logs engine subscribe and unsubscribe, sync attempts, 504 retries, and duplicate suppression. It does not log the token. If a line contains a token, stop and treat that as a defect.
 
+## Stopping a hub process
+
+Record the hub PID when it starts. The Stage 3 v1 canary aborted because `kill -0` from user `reemanos8422` on a `solveetcoagula` PID returns EPERM, and the script treated EPERM as "PID gone". A later `ps` check is the one that tells you the process is still there.
+
+```sh
+ps -p "$HUB_PID" -o pid,user,cmd
+sudo kill "$HUB_PID"
+ps -p "$HUB_PID" -o pid,user,cmd
+```
+
+If it is still listed, the Stage 3 hub needed SIGKILL after SIGTERM (the SDK write loop hung on shutdown):
+
+```sh
+sudo kill -KILL "$HUB_PID"
+ps -p "$HUB_PID" -o pid,user,cmd
+```
+
+That PID is the one you wrote down. Do not substitute a name search.
+
+- Never `kill -0` across users. EPERM is not "the process exited".
+- Never `pkill -f`. A pattern match can hit an engine, a second checkout, or the wrong Python.
+- Never signal a PID you did not record for this hub.
+
+`HubServer.close` closes idle client sockets before `wait_closed`, so a normal SIGTERM should return. The SDK write loop can still hang after that. KILL stays limited to the recorded PID.
+
 ## What not to do
 
-- Do not `systemctl enable` or `systemctl start` the files in `deploy/examples/`.
-- Do not copy those files to `/etc/systemd/system` on `matt-berserker`.
-- Do not pass `--orders live` or `--enable-live-orders`.
-- Do not export `ODIN_METAAPI_HUB=on` on the three Griff units while they are still the processes that synchronize.
+- Do not `systemctl enable` or `systemctl start` the shadow or live-readonly files in `deploy/examples/` as a trader. They stay on `--orders deny`.
+- Do not copy those two files to `/etc/systemd/system` on `matt-berserker`.
+- `deploy/examples/odin-metaapi-hub.live-orders.service.example` is the only example with `--orders live`, `--enable-live-orders`, and `ODIN_METAAPI_HUB_ORDERS=live`. Installing it is the Stage 4 cutover in [CUTOVER.md](CUTOVER.md), not a rehearsal.
+- Do not pass `--orders live` or `--enable-live-orders` unless that same command also has `--mode live` and the process environment has `ODIN_METAAPI_HUB_ORDERS=live`, and the three Griff units are already stopped.
+- Do not export `ODIN_METAAPI_HUB=on` on `griff_engine_btc`, `griff_engine_us100`, or `griff_engine_gold` while those processes are still the ones synchronizing. Stop them first. The unit names are those three, not `griff_engine` / `griff_engine_xau`.
 - Do not commit `config_us100.json` or any other file with `metaapi.token`.
+- Do not `pkill -f`, and do not use `kill -0` to decide that a hub PID has exited.

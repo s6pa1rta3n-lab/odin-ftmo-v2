@@ -49,3 +49,7 @@ Conclusion: the hypothesis holds. The hub is the fix we implemented. We did not 
 - `pytest.ini` points `testpaths` at `tests/e2e`. The hub suite is run explicitly so those e2e tests, which expect a local config and the SDK, are not mixed into this result.
 - `griff_engine_us100.py` and `griff_engine_gold.py` imported `MetaApiWrapper` at import time, which imports the SDK. They now import the factory. With the flag off, the SDK is imported when the engine is constructed, which is the same dependency as before.
 - Production Python on the VM is 3.9 (`PROJECT.md`). The hub uses `from __future__ import annotations` and does not use `asyncio.timeout` or `match`.
+
+## Cutover approval
+
+Odin approved production cutover on 2026-10-01 after Stage 2 (read-only live) and the Stage 3 safe canary were documented. The approval is recorded in [CUTOVER.md](CUTOVER.md) so the steps and the rollback are in git. The commit that recorded it does not install units or change the VM. Strategy modules are unchanged by that documentation. The hub remains plumbing in front of the existing engines.

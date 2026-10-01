@@ -230,3 +230,18 @@ def test_repo_service_installers_do_not_enable_the_hub() -> None:
     assert "--orders deny" in _exec_lines(example)
     assert "--mode live" in _exec_lines(readonly)
     assert "--orders deny" in _exec_lines(readonly)
+
+    live = (root / "deploy" / "examples" / "odin-metaapi-hub.live-orders.service.example").read_text(encoding="utf-8")
+    live_exec = _exec_lines(live)
+    assert "intentional cutover" in live.lower()
+    assert "--mode live" in live_exec
+    assert "--orders live" in live_exec
+    assert "--enable-live-orders" in live_exec
+    assert "ODIN_METAAPI_HUB_ORDERS=live" in live
+    assert "Environment=ODIN_METAAPI_HUB=on" not in live
+    assert "Environment=ODIN_METAAPI_HUB=1" not in live
+    dropin = (root / "deploy" / "examples" / "griff-hub-on.conf.example").read_text(encoding="utf-8")
+    assert "ODIN_METAAPI_HUB=on" in dropin
+    assert "ODIN_METAAPI_HUB_SOCKET=" in dropin
+    assert "PYTHONPATH=" in dropin
+    assert "intentional cutover" in dropin.lower()

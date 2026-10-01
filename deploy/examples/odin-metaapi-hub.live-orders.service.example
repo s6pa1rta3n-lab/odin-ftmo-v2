@@ -1,0 +1,61 @@
+# INTENTIONAL CUTOVER ONLY. DO NOT INSTALL until you are executing Stage 4.
+#
+# Odin approved production cutover on 2026-10-01 after Stage 2 (read-only live)
+# and the Stage 3 safe live-order canary were recorded. See
+# docs/metaapi_hub/CUTOVER.md. Copying this file to /etc/systemd/system and
+# starting it IS the production cutover. Nothing in this repository copies it
+# there, daemon-reloads it, or starts it.
+#
+# Do not install this for a test, a shadow rehearsal, or a read-only proof.
+# Those stay on:
+#   deploy/examples/odin-metaapi-hub.service                         (shadow, orders deny)
+#   deploy/examples/odin-metaapi-hub.live-readonly.service.example   (live, orders deny)
+# Those two files must keep --orders deny and must not gain --enable-live-orders.
+#
+# Live orders arm only when EVERY interlock below is present at once:
+#   ExecStart: --mode live
+#   ExecStart: --orders live
+#   ExecStart: --enable-live-orders
+#   Environment: ODIN_METAAPI_HUB_ORDERS=live
+# Dropping any one of them leaves orders denied. Shadow mode cannot be combined
+# with live orders. Engines cannot set ODIN_METAAPI_HUB_ORDERS; only this process can.
+#
+# ODIN_METAAPI_HUB=on belongs on the engine drop-in
+# (deploy/examples/griff-hub-on.conf.example), not on this unit.
+#
+# Durable checkout: NOT /tmp. The Stage 3 canary used /tmp/odin-ftmo-hub-shadow
+# and did not git-pull /home/solveetcoagula/odin_ftmo. Create a durable checkout
+# of this branch (recommended path, not a path this repo has verified on the VM):
+#   /home/solveetcoagula/odin-metaapi-hub
+# Point WorkingDirectory and PYTHONPATH at that checkout so `python3 -m metaapi_hub`
+# imports this package. Keep --config on the existing config file. Do not commit
+# that config and do not overwrite it with anything from git (it is gitignored).
+#
+# Account id below is the id already used by setup_us100_service.sh,
+# setup_gold_service.sh, and the 2026-10-01 canary. It is not a token.
+#
+# Before start: stop griff_engine_btc, griff_engine_us100, and griff_engine_gold.
+# Do not start this while those units, London, or Omni are still synchronizing
+# the same account. Unit names are the ones observed on matt-berserker during
+# the Stage 3 canary, not the older names in monitor_griff.py.
+#
+# Rollback is in docs/metaapi_hub/CUTOVER.md. Stop engines, remove their
+# drop-ins, stop this unit, start the engines on the old path.
+
+[Unit]
+Description=Odin MetaAPI hub LIVE orders — INTENTIONAL Stage 4 cutover only
+After=network.target
+
+[Service]
+Type=simple
+User=solveetcoagula
+WorkingDirectory=/home/solveetcoagula/odin-metaapi-hub
+Environment=PYTHONPATH=/home/solveetcoagula/odin-metaapi-hub
+Environment=ODIN_METAAPI_HUB_ORDERS=live
+ExecStart=/usr/bin/python3 -m metaapi_hub --mode live --orders live --enable-live-orders --config /home/solveetcoagula/odin_ftmo/config_us100.json --account-id a60dfd98-8a34-4c1b-9f2c-b40cdcc2c3bf --socket /run/odin/metaapi-hub.sock
+RuntimeDirectory=odin
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

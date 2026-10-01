@@ -5,7 +5,9 @@
 # As written it cannot connect to MetaAPI and cannot place orders:
 #   --mode shadow --orders deny
 #
-# Do not cut over until Odin approves. See docs/metaapi_hub/CUTOVER.md.
+# This file stays shadow and orders deny. It is not the cutover unit.
+# Odin approved Stage 4 on 2026-10-01; that command is the separate
+# live-orders example. See docs/metaapi_hub/CUTOVER.md.
 
 [Unit]
 Description=Odin MetaAPI hub SHADOW orders denied — DO NOT ENABLE until cutover is approved
