@@ -56,17 +56,46 @@ A shadow engine will be refused if you point it at `--mode live`. `ODIN_METAAPI_
 
 ## Health
 
-From any local process that can see the socket, send one JSON line:
+```sh
+python3 scripts/hub_health.py /run/odin/metaapi-hub.sock
+```
+
+Or, from any local process that can see the socket, send one JSON line:
 
 ```json
 {"id":"1","method":"health","params":{}}
 ```
 
-Read `synchronize_calls`, `clients`, `orders_live`, and `broker_order_calls`. See [FAILURE_MODES.md](FAILURE_MODES.md).
+Read `synchronize_calls`, `clients`, `orders_live`, and `broker_order_calls`. During upstream degradation also read `read_retries`, `candle_retries`, `candle_stale_serves`, and `last_upstream_error`. See [FAILURE_MODES.md](FAILURE_MODES.md).
+
+## Resilience flags
+
+All have production defaults; the installed unit does not need to change. Pass them on the hub `ExecStart` only to tune.
+
+| Flag | Default | Meaning |
+| --- | --- | --- |
+| `--rpc-timeout` | 20 | Budget for one SDK call. |
+| `--sync-timeout` | 60 | Budget for `wait_synchronized` on connect and reconnect. |
+| `--close-timeout` | 10 | Upper bound on closing an SDK connection before reconnecting. |
+| `--backoff-base` | 0.5 | First retry delay; doubles per attempt. |
+| `--backoff-max` | 30 | Cap on one delay before jitter. |
+| `--backoff-jitter` | 0.25 | Extra random delay as a fraction of the capped delay. |
+| `--read-attempts` | 3 | Attempts for idempotent reads on TIMEOUT/429/504. Orders: always 1. |
+| `--read-concurrency` | 4 | Concurrent reads on the shared connection. `1` = strict serialization. Mutations are always 1. |
+| `--candle-attempts` | 4 | Attempts inside one candle flight. |
+| `--candle-stale-ttl` | 300 | Serve the last good candle set for this long when a fresh fetch fails. `0` disables. |
+
+The hub logs the effective values at start on one `Hub resilience:` line.
+
+## Restarting with an open position
+
+[RESTART_CHECKLIST.md](RESTART_CHECKLIST.md): restart order (hub, flat engines, then BTC), how the engine re-adopts an open ticket from the broker, what to see in the journal, and rollback.
 
 ## Logs worth keeping
 
-The hub logs engine subscribe and unsubscribe, sync attempts, 504 retries, and duplicate suppression. It does not log the token. If a line contains a token, stop and treat that as a defect.
+The hub logs engine subscribe and unsubscribe, sync attempts, read and candle retries with the delay chosen, stale candle serves, reattaches, and duplicate suppression. It does not log the token. If a line contains a token, stop and treat that as a defect.
+
+Engine lines added on this branch: `Historical candle fetch attempt 1/2 failed … Retrying in …`, `Historical candle fetch failed on all 2 attempts … Consecutive failures: N. State=…`, `Historical candle fetch recovered after N consecutive failures`, `Position lookup failed (consecutive: N). Keeping IN_TRADE for ticket …`, `History incomplete (N/50 bars). Holding IN_TRADE for ticket …`, `History N/50 bars while IN_TRADE: managing ticket …`. Each one says what the engine is holding and that no broker action was taken.
 
 ## Stopping a hub process
 

@@ -9,7 +9,8 @@ The hub ships **off** until `ODIN_METAAPI_HUB` is set. Operators completed the S
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Root cause, process layout, request path |
 | [DECISIONS.md](DECISIONS.md) | What we checked, what we rejected, what we shipped |
 | [FAILURE_MODES.md](FAILURE_MODES.md) | 429, 504, broker disconnect, duplicate orders |
-| [RUNBOOK.md](RUNBOOK.md) | How to run shadow mode and how to read health |
+| [RUNBOOK.md](RUNBOOK.md) | How to run shadow mode, how to read health, resilience flags |
+| [RESTART_CHECKLIST.md](RESTART_CHECKLIST.md) | Deploying a hub/engine update and restarting while BTC is `IN_TRADE`: order, reattach mechanics, verification, rollback |
 | [CUTOVER.md](CUTOVER.md) | Stages 2–4 PASS, and the exact rollback |
 | [TEST_EVIDENCE.md](TEST_EVIDENCE.md) | Local suite plus Stage 2, 3, and 4 results |
 | [evidence/2026-10-01-stage3-canary.md](evidence/2026-10-01-stage3-canary.md) | Stage 3 canary report (no token) |
