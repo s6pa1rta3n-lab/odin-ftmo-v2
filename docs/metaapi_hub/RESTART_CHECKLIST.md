@@ -62,10 +62,12 @@ sudo -u solveetcoagula cp -a "$LIVE/griff_engine_live.py" "$LIVE/griff_engine_li
 sudo -u solveetcoagula cp -a "$LIVE/metaapi_hub" "$LIVE/metaapi_hub.pre-resilience-$STAMP"
 sudo -u solveetcoagula cp -a "$HUB/metaapi_hub"  "$HUB/metaapi_hub.pre-resilience-$STAMP"
 
-# The live engine file was factory-patched by hand at Stage 4. Confirm it differs
-# from git only by that wiring before replacing it. If it differs elsewhere, stop
-# and port the engine patch instead of overwriting.
-diff "$SRC/griff_engine_live.py" "$LIVE/griff_engine_live.py" | head -80
+# The live engine file was factory-patched by hand at Stage 4, and the repo's
+# fix_duplicate_logic.py (fetch_positions_safe -> None, step() returns SKIPPED)
+# may also have been run on it without landing in git. This branch supersedes
+# both. Read the diff before replacing; anything other than those two patches
+# must be ported, not overwritten.
+diff "$SRC/griff_engine_live.py" "$LIVE/griff_engine_live.py" | head -120
 
 sudo -u solveetcoagula rsync -a --delete --exclude '__pycache__' "$SRC/metaapi_hub/" "$HUB/metaapi_hub/"
 sudo -u solveetcoagula rsync -a --delete --exclude '__pycache__' "$SRC/metaapi_hub/" "$LIVE/metaapi_hub/"
