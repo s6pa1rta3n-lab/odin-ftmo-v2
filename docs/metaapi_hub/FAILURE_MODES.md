@@ -46,6 +46,19 @@ Observed on matt-berserker ~11:45 ET: `griff_engine_us100` was restarted after t
 
 Adoption places nothing and never closes or modifies a position. The 16:00 hard close is unchanged; it now simply has the correct state to act on after a restart.
 
+## Added 2026-10-02 (Gold place-time double-book guard)
+
+The US100 race of 2026-10-02 (15:09:48 UTC BUY 9.46 placed → 15:09:58 broker fill `172673462` → 15:10:03 hub `NOT_CONNECTED` for that same mutation → engine stayed `SEARCHING` → 15:14:17 BUY 8.88 `172676142` placed on top → `172673462` SL −861.81) was closed for US100 by `modules/entry_guard.py` and `place_entry()` in `griff_engine_us100.py` (PR #31). `griff_engine_gold.py` had the identical place pattern (catch, log `Failed to place order`, do nothing) and the restart adoption above only covers startup and reconnect. The same guard is now wired into Gold.
+
+| Symptom | Before | Now |
+| --- | --- | --- |
+| Gold entry filled, acknowledgement lost (`NOT_CONNECTED`, `TIMEOUT`, `CLOSED`, `BROKER_ERROR`, socket drop, any unexpected exception) | `Failed to place order: …`, state stayed `SEARCHING`, no position read. The next 15 s iteration re-evaluated the breakout (still true) and sent a second `GRIFF_GOLD_BREAKOUT` market order while the first was live. | `reconcile_after_place_error()` marks the entry unreconciled (`entry_sync_required`), waits 2 s, and re-reads positions. A matching `XAUUSD` / `GRIFF_GOLD*` position is the fill: `Adopting open Gold position ticket … -> IN_TRADE. Reason: pre-entry position check found an open Gold position`. The one-trade-per-day bookkeeping is applied exactly as on a confirmed success. |
+| Reconciling read also fails | n/a | `entry_sync_required` stays set. The `SEARCHING` branch reconciles instead of evaluating setups, so no price poll and no order until a position read succeeds. Unknown is not flat. |
+| Gold ticket already open when the breakout fires (other process, earlier instance, fill found late) | Placed on top of it. | `confirm_flat_before_entry()` requires a fresh, successful, empty read before every order. A matching position is adopted; two or more are logged as an error and the first is managed. Nothing is ever added to the book. |
+| Hub refusal (`ORDERS_DISABLED`, `DRY_RUN`, `COMMENT_REQUIRED`, `BAD_REQUEST`, `FORBIDDEN_SYNC`) | Same catch-all. | Known never to have reached the broker: no 2 s wait, but the book is still re-read before the next entry. A refused order does not consume the day's trade, as before. |
+
+Strategy parameters, the 03:15–10:00 window, sizing, the 16:00 hard close, and the startup/reconnect adoption are unchanged. The guard places nothing on its own and never closes or modifies a position.
+
 ## Operator signals
 
 `health` (no login beyond the socket file mode) returns:
