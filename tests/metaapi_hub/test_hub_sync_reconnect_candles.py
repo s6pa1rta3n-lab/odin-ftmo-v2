@@ -167,6 +167,7 @@ def test_external_slot_backs_off_instead_of_storming() -> None:
             max_sync_attempts=3,
             backoff_base=0.2,
             sleep=_record,
+            rand=lambda: 0.0,
         )
         with pytest.raises(HubError) as caught:
             await owner.ensure_connected()
@@ -179,6 +180,22 @@ def test_external_slot_backs_off_instead_of_storming() -> None:
         assert broker.synchronize_calls == 1
 
     asyncio.run(_run())
+
+
+def test_backoff_is_capped_and_jittered() -> None:
+    owner = SyncOwner(
+        InMemoryBroker(),
+        mode="shadow",
+        orders_mode="deny",
+        backoff_base=1.0,
+        backoff_max=4.0,
+        backoff_jitter=0.5,
+        rand=lambda: 1.0,
+    )
+    # 1, 2, 4, 4(capped) each plus 50% jitter at rand=1.0
+    assert [owner.backoff_delay(n) for n in (1, 2, 3, 4)] == [1.5, 3.0, 6.0, 6.0]
+    pinned = SyncOwner(InMemoryBroker(), mode="shadow", backoff_base=1.0, backoff_max=4.0, rand=lambda: 0.0)
+    assert [pinned.backoff_delay(n) for n in (1, 2, 3, 4)] == [1.0, 2.0, 4.0, 4.0]
 
 
 def test_server_rejects_client_synchronize_and_closing_a_client_keeps_the_slot() -> None:

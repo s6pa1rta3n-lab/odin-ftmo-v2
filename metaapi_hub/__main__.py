@@ -41,6 +41,60 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--account-id", default="")
     parser.add_argument("--cache-ttl", type=float, default=5.0)
     parser.add_argument("--rpc-timeout", type=float, default=20.0)
+    parser.add_argument(
+        "--sync-timeout",
+        type=float,
+        default=60.0,
+        help="Budget for wait_synchronized on connect/reconnect (default 60s).",
+    )
+    parser.add_argument(
+        "--close-timeout",
+        type=float,
+        default=10.0,
+        help="Upper bound on closing an SDK connection before reconnecting (default 10s).",
+    )
+    parser.add_argument(
+        "--backoff-base",
+        type=float,
+        default=0.5,
+        help="First retry delay; doubles per attempt (default 0.5s).",
+    )
+    parser.add_argument(
+        "--backoff-max",
+        type=float,
+        default=30.0,
+        help="Cap on a single retry delay before jitter (default 30s).",
+    )
+    parser.add_argument(
+        "--backoff-jitter",
+        type=float,
+        default=0.25,
+        help="Random extra delay as a fraction of the capped delay (default 0.25).",
+    )
+    parser.add_argument(
+        "--read-attempts",
+        type=int,
+        default=3,
+        help="Attempts for idempotent reads on TIMEOUT/429/504 (default 3). Orders are never retried.",
+    )
+    parser.add_argument(
+        "--read-concurrency",
+        type=int,
+        default=4,
+        help="Concurrent read RPCs on the shared connection (default 4; 1 restores strict serialization). Mutations are always one at a time.",
+    )
+    parser.add_argument(
+        "--candle-attempts",
+        type=int,
+        default=4,
+        help="Attempts for one historical-candle flight (default 4).",
+    )
+    parser.add_argument(
+        "--candle-stale-ttl",
+        type=float,
+        default=300.0,
+        help="Serve the last good candle set for this many seconds when a fresh fetch fails (default 300s; 0 disables).",
+    )
     return parser.parse_args(argv)
 
 
@@ -84,7 +138,13 @@ async def _serve(args: argparse.Namespace) -> None:
         log.warning("Hub starting in SHADOW mode. No MetaAPI connection will be opened.")
     else:
         token, account_id = _load_credentials(args.config, args.account_id)
-        broker = MetaApiBroker(token, account_id, rpc_timeout=args.rpc_timeout)
+        broker = MetaApiBroker(
+            token,
+            account_id,
+            rpc_timeout=args.rpc_timeout,
+            sync_timeout=args.sync_timeout,
+            close_timeout=args.close_timeout,
+        )
         log.warning(
             "Hub starting in LIVE read path for account %s orders_mode=%s. Confirm Odin approved this cutover.",
             account_id,
@@ -96,6 +156,26 @@ async def _serve(args: argparse.Namespace) -> None:
         orders_mode=args.orders,
         account_id=account_id,
         cache_ttl=args.cache_ttl,
+        backoff_base=args.backoff_base,
+        backoff_max=args.backoff_max,
+        backoff_jitter=args.backoff_jitter,
+        read_attempts=args.read_attempts,
+        read_concurrency=args.read_concurrency,
+        candle_attempts=args.candle_attempts,
+        candle_stale_ttl=args.candle_stale_ttl,
+    )
+    log.info(
+        "Hub resilience: rpc_timeout=%.0fs sync_timeout=%.0fs backoff=%.2fs..%.0fs jitter=%.2f "
+        "read_attempts=%s read_concurrency=%s candle_attempts=%s candle_stale_ttl=%.0fs",
+        args.rpc_timeout,
+        args.sync_timeout,
+        args.backoff_base,
+        args.backoff_max,
+        args.backoff_jitter,
+        args.read_attempts,
+        args.read_concurrency,
+        args.candle_attempts,
+        args.candle_stale_ttl,
     )
     server = HubServer(owner, args.socket)
     await server.start()
