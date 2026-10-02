@@ -9,8 +9,9 @@ These tests prove:
       state machine on as if the order were gone;
   (2) a later successful cancel, or broker confirmation that the order is
       already gone, clears tracking;
-  (3) restart/reconcile retries an unconfirmed cancel instead of adopting or
-      ignoring a leftover GRIFF_ pending whose setup window expired.
+  (3) restart/reconcile cancel-retries every untracked GRIFF_ pending, of any
+      age, until the broker book confirms it is gone, and never adopts one as
+      a live setup or infers a setup window from it.
 
 No network, no MetaAPI: the broker is a small in-memory order book.
 """
@@ -364,47 +365,101 @@ async def test_restart_reconcile_deferred_when_order_book_unreadable() -> None:
     assert engine.unconfirmed_cancel_order_ids == {}
 
 
+@pytest.mark.parametrize(
+    "placed_at",
+    [
+        datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0) + timedelta(seconds=22),  # this hour
+        datetime.now(timezone.utc) - timedelta(hours=2),
+        datetime.now(timezone.utc) - timedelta(days=3),
+        None,  # broker returned no time at all
+    ],
+    ids=["placed-this-hour", "placed-2h-ago", "placed-3d-ago", "no-time"],
+)
 @pytest.mark.asyncio
-async def test_restart_readopts_pending_whose_window_is_still_live() -> None:
-    """A GRIFF_ pending placed in the current hour is still inside its window: track it, do not cancel it."""
-    now = datetime.now(timezone.utc)
-    current_hour = now.replace(minute=0, second=0, microsecond=0)
-    live = pending_order(placed_at=current_hour + timedelta(seconds=22))
-    broker = FakeBroker([live])
+async def test_restart_never_adopts_untracked_pending_regardless_of_age(placed_at) -> None:
+    """Any untracked GRIFF_ pending is cancel-retried until confirmed gone; none is adopted as a live setup."""
+    order = pending_order(placed_at=placed_at)
+    if placed_at is None:
+        order.pop("time")
+    broker = FakeBroker([order])
+    broker.script_cancel(TICKET, MARKET_CLOSED)
+    current_hour = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0)
     engine = make_engine(broker, build_candles(current_hour - timedelta(hours=1)))
 
     result = await engine.step()
 
-    assert broker.cancel_calls == []
-    assert engine.state == "PENDING_PLACED"
-    assert engine.pending_sell_order_id == TICKET
-    assert engine.pending_setup_bar_time == current_hour - timedelta(hours=1)
-    assert result["status"] == "PENDING_PLACED"
+    assert broker.cancel_calls == [TICKET]
+    assert engine.state == "CANCEL_PENDING"
+    assert result["status"] == "CANCEL_PENDING"
+    assert engine.pending_sell_order_id is None and engine.pending_buy_order_id is None, "never adopted"
+    assert engine.pending_setup_bar_time is None, "no setup window may be inferred from the order"
+    assert TICKET in engine.unconfirmed_cancel_order_ids
     engine.place_pending_breakout_orders.assert_not_called()
+
+    await engine.step()  # broker accepts the cancel now
+
+    assert TICKET not in broker.orders
+    assert engine.state == "SEARCHING"
+    assert engine.unconfirmed_cancel_order_ids == {}
+    assert broker.cancel_calls == [TICKET, TICKET]
 
 
 @pytest.mark.asyncio
-async def test_readopted_pending_is_cancelled_when_its_window_expires() -> None:
-    """After re-adoption the normal expiry rule applies, with the same retry-until-confirmed behavior."""
+async def test_restart_cancels_both_buy_and_sell_untracked_legs() -> None:
     now = datetime.now(timezone.utc)
-    current_hour = now.replace(minute=0, second=0, microsecond=0)
-    broker = FakeBroker([pending_order(placed_at=current_hour + timedelta(seconds=5))])
-    broker.script_cancel(TICKET, MARKET_CLOSED)
-    engine = make_engine(broker, build_candles(current_hour - timedelta(hours=1)))
+    broker = FakeBroker(
+        [
+            pending_order(order_id="B1", order_type="ORDER_TYPE_BUY_STOP", placed_at=now),
+            pending_order(order_id="S1", order_type="ORDER_TYPE_SELL_STOP", placed_at=now),
+        ]
+    )
+    broker.script_cancel("S1", MARKET_CLOSED)
+    latest_bar = now.replace(minute=0, second=0, microsecond=0) - timedelta(hours=1)
+    engine = make_engine(broker, build_candles(latest_bar))
 
     await engine.step()
-    assert engine.state == "PENDING_PLACED"
 
-    engine.fetch_completed_1h_candles = AsyncMock(return_value=build_candles(current_hour))  # next bar completed
-    await engine.step()
+    assert sorted(broker.cancel_calls) == ["B1", "S1"]
+    assert "B1" not in broker.orders
     assert engine.state == "CANCEL_PENDING"
-    assert engine.pending_sell_order_id == TICKET
-    assert broker.cancel_calls == [TICKET]
+    assert engine.unconfirmed_cancel_order_ids == {"S1": 1}
+    assert engine.pending_buy_order_id is None and engine.pending_sell_order_id is None
 
     await engine.step()
     assert engine.state == "SEARCHING"
-    assert engine.pending_sell_order_id is None
     assert engine.unconfirmed_cancel_order_ids == {}
+
+
+@pytest.mark.asyncio
+async def test_untracked_pending_found_while_in_trade_is_cancel_retried_without_leaving_in_trade() -> None:
+    """Restart with an open GRIFF position and an untracked GRIFF pending: the pending is cancelled, the trade kept."""
+    broker = FakeBroker([pending_order(placed_at=datetime.now(timezone.utc))])
+    broker.script_cancel(TICKET, MARKET_CLOSED)
+    engine = make_engine(broker, build_candles(LATEST_BAR))
+    engine.fetch_positions_safe = AsyncMock(
+        return_value=[
+            {
+                "id": "777",
+                "symbol": SYMBOL,
+                "comment": GRIFF_ORDER_COMMENT,
+                "type": "POSITION_TYPE_BUY",
+                "openPrice": 109000.0,
+                "volume": 0.5,
+                "stopLoss": 107500.0,
+            }
+        ]
+    )
+    engine.ratchet_trailing_stop = AsyncMock()
+
+    await engine.step()
+    assert engine.state == "IN_TRADE"
+    assert broker.cancel_calls == [TICKET]
+    assert engine.unconfirmed_cancel_order_ids == {TICKET: 1}
+
+    await engine.step()
+    assert engine.state == "IN_TRADE"
+    assert engine.unconfirmed_cancel_order_ids == {}
+    assert TICKET not in broker.orders
 
 
 @pytest.mark.asyncio
@@ -427,24 +482,26 @@ async def test_reconcile_ignores_other_symbols_and_non_griff_orders() -> None:
 
 
 @pytest.mark.asyncio
-async def test_duplicate_griff_pendings_of_same_type_are_not_both_adopted() -> None:
+async def test_reconcile_runs_once_and_leaves_own_tracked_pendings_alone() -> None:
+    """Reconcile only targets untracked ids; a pending this process placed is left to the normal expiry rule."""
     now = datetime.now(timezone.utc)
-    current_hour = now.replace(minute=0, second=0, microsecond=0)
-    broker = FakeBroker(
-        [
-            pending_order(order_id="A", placed_at=current_hour + timedelta(seconds=5)),
-            pending_order(order_id="B", placed_at=current_hour + timedelta(seconds=9)),
-        ]
-    )
-    engine = make_engine(broker, build_candles(current_hour - timedelta(hours=1)))
+    broker = FakeBroker([pending_order(order_id="own"), pending_order(order_id="orphan", placed_at=now - timedelta(hours=5))])
+    latest_bar = now.replace(minute=0, second=0, microsecond=0) - timedelta(hours=1)
+    engine = make_engine(broker, build_candles(latest_bar))
+    engine.state = "PENDING_PLACED"
+    engine.pending_sell_order_id = "own"
+    engine.pending_setup_bar_time = latest_bar  # window still live
 
     await engine.step()
 
+    assert broker.cancel_calls == ["orphan"]
     assert engine.state == "PENDING_PLACED"
-    assert engine.pending_sell_order_id == "A"
-    assert broker.cancel_calls == ["B"]
-    assert "B" not in broker.orders
-    assert engine.unconfirmed_cancel_order_ids == {}
+    assert engine.pending_sell_order_id == "own"
+    assert "own" in broker.orders
+    assert engine.pending_orders_reconciled is True
+
+    await engine.step()
+    assert broker.cancel_calls == ["orphan"], "reconcile does not re-run once the book has been read"
 
 
 # ---------------------------------------------------------------------------

@@ -208,23 +208,6 @@ def is_inside_bar(current: Dict[str, Any], previous: Dict[str, Any]) -> bool:
     )
 
 
-def coerce_utc_datetime(value: Any) -> Optional[datetime]:
-    """Normalize a broker timestamp (datetime or ISO-8601 string) to an aware UTC datetime.
-
-    Returns:
-        Aware UTC datetime, or None when the value cannot be interpreted.
-    """
-    if isinstance(value, datetime):
-        return value if value.tzinfo is not None else value.replace(tzinfo=timezone.utc)
-    if isinstance(value, str):
-        try:
-            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
-        except ValueError:
-            return None
-        return parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=timezone.utc)
-    return None
-
-
 def calculate_position_size(
     equity: float,
     atr_14: float,
@@ -944,23 +927,18 @@ class GriffLiveEngine:
         A fresh process starts with no tracked ids, so without this step a
         pending order left by the previous process (for example one whose
         cancel failed with "Market is closed") would keep working at the broker
-        with nobody tracking it. Each untracked GRIFF_ pending is classified by
-        the hour it was placed:
-
-        - Placed in the current UTC hour: its setup window (the completed bar
-          before placement) is still live, so it is re-adopted into the
-          matching pending_*_order_id slot and the state machine resumes
-          PENDING_PLACED exactly as if the process had never restarted. Normal
-          window expiry then cancels it on the next completed bar.
-        - Placed in an earlier hour, with an unparseable time, with an unknown
-          type, or when its slot is already taken: its window has expired. It is
-          cancelled through cancel_orders_until_confirmed and stays tracked in
-          unconfirmed_cancel_order_ids until the broker confirms it is gone.
+        with nobody tracking it. Every untracked GRIFF_ pending on this symbol,
+        regardless of age or type, is cancelled through
+        cancel_orders_until_confirmed and stays in unconfirmed_cancel_order_ids
+        until the broker order book confirms it is gone. Nothing is re-adopted
+        as a live setup and no setup window is inferred from the order; the
+        engine only knows about pendings it placed itself in this process.
 
         Returns:
-            True once the order book was read and classified (even if some
-            cancels are still unconfirmed); False if the book could not be read,
-            in which case the next cycle retries the whole reconcile.
+            True once the order book was read and every untracked pending has
+            been handed to the cancel/retry path (even if some cancels are
+            still unconfirmed); False if the book could not be read, in which
+            case the next cycle retries the whole reconcile.
         """
         book = await self.fetch_griff_pending_orders()
         if book is None:
@@ -968,47 +946,21 @@ class GriffLiveEngine:
             return False
 
         tracked = set(self._tracked_pending_order_ids())
-        now_hour = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0)
-        expired_ids: List[str] = []
-
+        untracked_ids: List[str] = []
         for o in book:
             oid = str(o.get("id"))
             if oid in tracked or oid in self.unconfirmed_cancel_order_ids:
                 continue
-
-            placed_at = coerce_utc_datetime(o.get("time"))
-            placed_hour = placed_at.replace(minute=0, second=0, microsecond=0) if placed_at else None
-            order_type = str(o.get("type", ""))
-            slot = "buy" if order_type == "ORDER_TYPE_BUY_STOP" else "sell" if order_type == "ORDER_TYPE_SELL_STOP" else None
-            slot_free = (slot == "buy" and not self.pending_buy_order_id) or (
-                slot == "sell" and not self.pending_sell_order_id
+            logger.warning(
+                "Found untracked GRIFF pending order %s (%s, placed %s). Canceling until the broker confirms it is gone.",
+                oid,
+                o.get("type") or "unknown type",
+                o.get("time") or "unknown time",
             )
+            untracked_ids.append(oid)
 
-            if placed_hour == now_hour and slot_free and self.state in ("SEARCHING", "PENDING_PLACED"):
-                if slot == "buy":
-                    self.pending_buy_order_id = oid
-                else:
-                    self.pending_sell_order_id = oid
-                self.pending_setup_bar_time = placed_hour - timedelta(hours=1)
-                self.state = "PENDING_PLACED"
-                logger.info(
-                    "Re-adopted live GRIFF pending %s order %s placed %s (setup bar %s).",
-                    order_type,
-                    oid,
-                    placed_at.isoformat(),
-                    self.pending_setup_bar_time.isoformat(),
-                )
-            else:
-                logger.warning(
-                    "Found GRIFF pending order %s (%s, placed %s) outside its setup window with no tracking. Canceling.",
-                    oid,
-                    order_type or "unknown type",
-                    placed_at.isoformat() if placed_at else "unknown time",
-                )
-                expired_ids.append(oid)
-
-        if expired_ids:
-            confirmed = await self.cancel_orders_until_confirmed(expired_ids)
+        if untracked_ids:
+            confirmed = await self.cancel_orders_until_confirmed(untracked_ids)
             if not confirmed and self.state == "SEARCHING":
                 self.state = "CANCEL_PENDING"
         return True
