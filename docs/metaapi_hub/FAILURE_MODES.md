@@ -33,6 +33,19 @@ Observed on matt-berserker 04:43–06:43 EDT: hub-side `TimeoutError`/`TimeoutEx
 
 None of these paths close, cancel, or modify a broker position. The engine's only mutations remain the strategy's own: cancelling the unfilled opposite pending leg once a position exists, and tightening the stop on a new completed bar.
 
+## Added 2026-10-02 (US100 / Gold restart adoption)
+
+Observed on matt-berserker ~11:45 ET: `griff_engine_us100` was restarted after the double-book guard deploy while the broker still held BUY `172676142` (US100.cash 8.88 @ 30807.38, SL/TP set). The new process stayed `SEARCHING`.
+
+| Symptom | Before | Now |
+| --- | --- | --- |
+| Restart mid-trade, outside the entry window (US100 after 11:30 ET, Gold after 10:00 ET) | The only position read on the `SEARCHING` path was the pre-entry check, which runs inside the window. Outside it the engine made no broker call, never saw the open ticket, and the 16:00 hard close (gated on `IN_TRADE`) would not have fired. BTC was unaffected: `GriffLiveEngine.step()` re-syncs positions every cycle. | `modules/book_sync.py` (`BrokerBookSync`) is called at the top of `step()` on the first iteration after startup, after the engine's own `connect()`, and whenever the hub client's `reattaches` counter has moved. It reads positions and adopts the one matching the symbol or `GRIFF_US100*` / `GRIFF_GOLD*` as `IN_TRADE` with the broker's ticket, size, SL, TP. Journal line: `Adopting open US100 position ticket 172676142 BUY 8.88 US100.cash @ 30807.38 SL=… TP=… -> IN_TRADE. Reason: engine startup`. |
+| Startup position read fails | Not applicable (no read). | Unknown is not flat. The sync stays pending and is retried each iteration; while pending the `SEARCHING` branch evaluates no setup, so nothing can be placed before the book state is known. |
+| Two matching positions open at restart | Pre-entry check adopted the first (inside the window only). | Same, now also outside the window: the first is managed, the rest are logged as an error, no entry is ever added. |
+| Gold `IN_TRADE` position read fails | Bare exception → `Loop error`, state unchanged by accident. | Routed through the same helper: `None` keeps `IN_TRADE`; one successful empty read returns to `SEARCHING`. |
+
+Adoption places nothing and never closes or modifies a position. The 16:00 hard close is unchanged; it now simply has the correct state to act on after a restart.
+
 ## Operator signals
 
 `health` (no login beyond the socket file mode) returns:

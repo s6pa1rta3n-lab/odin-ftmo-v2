@@ -21,10 +21,14 @@ from datetime import datetime
 import pytz
 
 from metaapi_hub.factory import build_execution_wrapper
+from modules.book_sync import (
+    BrokerBookSync,
+    adopted_position_record,
+    describe_position,
+)
 from modules.entry_guard import (
     describe_place_error,
     is_ambiguous_place_error,
-    matching_positions,
 )
 
 # Seconds to wait after an ambiguous place error before the reconciling
@@ -57,7 +61,6 @@ class US100Engine:
         # a successful position read; while set, no new entry may be sent.
         self.entry_sync_required = False
         self.last_place_error = None
-        self.position_sync_failures = 0
         self.post_place_error_sync_delay = POST_PLACE_ERROR_SYNC_DELAY_SECONDS
         
         with open(self.config_path, "r") as f:
@@ -68,6 +71,22 @@ class US100Engine:
             self.tick_value = float(cfg.get("tick_value", 1.0))
             self.order_comment = "GRIFF_US100_NY"
             self.comment_prefix = US100_COMMENT_PREFIX
+
+        # Startup / reconnect adoption (see modules/book_sync.py for the
+        # 2026-10-02 restart gap). Owns the position read and its failure
+        # counter; this engine owns the state machine.
+        self.book_sync = BrokerBookSync(
+            book_name="US100",
+            symbol=self.mt5_symbol(),
+            comment_prefix=self.comment_prefix,
+            logger=logger,
+        )
+
+    @property
+    def position_sync_failures(self) -> int:
+        """Consecutive failed position reads (shared with the book sync helper)."""
+
+        return self.book_sync.read_failures
 
     async def connect(self):
         logger.info("Connecting to MetaApi for US100...")
@@ -151,32 +170,40 @@ class US100Engine:
         ``None`` as "unknown", never as "flat".
         """
 
-        try:
-            positions = await self.wrapper.get_positions_rest()
-        except Exception as e:
-            self.position_sync_failures += 1
-            logger.error(
-                f"Position read failed ({self.position_sync_failures} consecutive): {e}. "
-                "Book state is unknown; not treating this as flat."
-            )
-            return None
-        if self.position_sync_failures:
-            logger.info(f"Position read recovered after {self.position_sync_failures} consecutive failures.")
-        self.position_sync_failures = 0
-        return matching_positions(positions, symbol=self.mt5_symbol(), comment_prefix=self.comment_prefix)
+        return await self.book_sync.read_book(self.wrapper)
 
     def adopt_position(self, position, reason):
-        """Switch to IN_TRADE around a position this engine did not knowingly open."""
+        """Switch to IN_TRADE around a position this engine did not knowingly open.
 
-        self.active_position = position
+        Ticket, size, SL, and TP are taken from the broker as-is. The position
+        is not placed again, closed, or modified by adopting it.
+        """
+
+        self.active_position = adopted_position_record(position, symbol=self.mt5_symbol(), comment=self.order_comment)
         self.state = "IN_TRADE"
         self.entry_sync_required = False
         self.last_place_error = None
-        logger.warning(
-            f"Adopting open US100 position {position.get('id')} "
-            f"({position.get('type')} {position.get('volume')} @ {position.get('openPrice')}, "
-            f"comment={position.get('comment') or position.get('brokerComment')!r}) -> IN_TRADE. Reason: {reason}"
-        )
+        logger.warning(f"Adopting open US100 position {describe_position(position)} -> IN_TRADE. Reason: {reason}")
+
+    async def sync_book_with_broker(self, reason):
+        """Startup / reconnect sync: adopt an open US100 position regardless of the session window.
+
+        Returns True when a position read succeeded (the sync is complete),
+        False when it failed and must be retried on the next iteration.
+        """
+
+        result = await self.book_sync.sync(self.wrapper, reason=reason, current_state=self.state)
+        if not result["ok"]:
+            return False
+        adopt = result["adopt"]
+        if adopt is None:
+            return True
+        if self.state != "IN_TRADE":
+            self.adopt_position(adopt, reason)
+        else:
+            # Already managing: refresh ticket/size/SL/TP from the broker.
+            self.active_position = adopted_position_record(adopt, symbol=self.mt5_symbol(), comment=self.order_comment)
+        return True
 
     async def confirm_flat_before_entry(self):
         """Return True only when a successful position read shows no US100 book.
@@ -250,14 +277,18 @@ class US100Engine:
 
         logger.info(f"Order Success: {res}")
         result = res if isinstance(res, dict) else {}
-        self.active_position = {
-            "id": str(result.get("positionId") or result.get("orderId") or ""),
-            "symbol": self.mt5_symbol(),
-            "type": "POSITION_TYPE_BUY" if trend == 'BUY' else "POSITION_TYPE_SELL",
-            "volume": lots,
-            "openPrice": result.get("openPrice"),
-            "comment": self.order_comment,
-        }
+        self.active_position = adopted_position_record(
+            {
+                "id": str(result.get("positionId") or result.get("orderId") or ""),
+                "symbol": self.mt5_symbol(),
+                "type": "POSITION_TYPE_BUY" if trend == 'BUY' else "POSITION_TYPE_SELL",
+                "volume": lots,
+                "openPrice": result.get("openPrice"),
+                "stopLoss": round(sl, 2),
+                "takeProfit": round(tp, 2),
+                "comment": self.order_comment,
+            }
+        )
         self.state = "IN_TRADE"
         self.entry_sync_required = False
         self.last_place_error = None
@@ -268,6 +299,16 @@ class US100Engine:
 
         if not self.wrapper.connection:
             await self.connect()
+            self.book_sync.note_reconnect("engine reconnected to the execution wrapper")
+
+        # Startup / reconnect sync runs before anything that depends on
+        # ``state``, including the 16:00 hard close below, and regardless of
+        # the session window. 2026-10-02: a restart at ~11:45 ET with ticket
+        # 172676142 open left this engine SEARCHING because the only position
+        # read on the SEARCHING path lived inside the 09:45-11:30 entry window.
+        resync_reason = self.book_sync.resync_reason(self.wrapper)
+        if resync_reason:
+            await self.sync_book_with_broker(resync_reason)
 
         est_now = self.get_est_time()
         time_str = est_now.strftime('%H:%M')
@@ -286,8 +327,15 @@ class US100Engine:
                         except Exception as e:
                             logger.error(f"Failed to close position: {e}")
                 self.state = "SEARCHING"
+                self.active_position = None
         
         if self.state == "SEARCHING":
+            if self.book_sync.pending:
+                # Startup/reconnect read has not succeeded yet, so it is not
+                # known whether the broker already holds a US100 position.
+                # Unknown is not flat: evaluate no setup until a read succeeds.
+                return
+
             if self.entry_sync_required:
                 # A previous entry attempt ended in an error and no position
                 # read has succeeded since. Reconcile first; this may adopt a
@@ -350,7 +398,7 @@ class US100Engine:
                 self.active_position = None
                 self.state = "SEARCHING"
             else:
-                self.active_position = matched[0]
+                self.active_position = adopted_position_record(matched[0], symbol=self.mt5_symbol(), comment=self.order_comment)
 
     async def run_loop(self):
         self.is_running = True

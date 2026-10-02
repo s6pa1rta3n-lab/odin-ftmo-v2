@@ -15,6 +15,8 @@ The engine keeps no position state that matters across a restart. Every cycle it
 5. Trailing-stop management resumes from the broker's stop, not from a remembered one. With at least 15 completed 1H bars the ratchet is evaluated on the latest completed bar. It only ever tightens (`max` for BUY, `min` for SELL) and only when the structural swing condition holds, which is exactly what the previous process would have done on that bar. With fewer than 15 bars the engine logs `History incomplete (N/50 bars). Holding IN_TRADE for ticket …` and does nothing to the position.
 6. `live_state.json` is write-only. The engine never reads it back. There is no local file that can disagree with the broker after a restart.
 
+**US100 and Gold (added 2026-10-02 after the 11:45 ET US100 restart).** `griff_engine_us100.py` and `griff_engine_gold.py` now do the same on their first loop iteration, independent of their entry windows: `step()` reads positions through `modules/book_sync.py`, and an open `US100.cash` / `GRIFF_US100*` (or `XAUUSD` / `GRIFF_GOLD*`) position is adopted as `IN_TRADE` with the broker's ticket, size, SL, and TP. Journal line: `Adopting open US100 position ticket 172676142 BUY 8.88 US100.cash @ 30807.38 SL=… TP=… -> IN_TRADE. Reason: engine startup`. A flat book logs `US100 book sync (engine startup): broker shows no open US100 position; state SEARCHING.` If the startup read fails the engine logs that the book is unknown, retries next iteration, and evaluates no setup until a read succeeds. The same sync re-runs after a hub reconnect (`Reason: hub reconnect (reattaches 0 -> 1)`). Nothing is placed, closed, or modified by adoption; the existing 16:00 ET hard close then fires normally because the state is `IN_TRADE`.
+
 What a restart does reset, unchanged from before this branch and left alone because it is risk logic:
 
 - `day_start_equity` is set to the equity at start, so the daily-loss baseline moves to the restart point.
@@ -79,7 +81,7 @@ sudo -u solveetcoagula bash -c "cd $LIVE && python3 -c 'from metaapi_hub.factory
 sudo -u solveetcoagula bash -c "cd $LIVE && python3 -c 'from metaapi_hub.protocol import MAX_MESSAGE_BYTES; print(MAX_MESSAGE_BYTES)'"
 ```
 
-`griff_engine_us100.py` and `griff_engine_gold.py` are not changed by this branch. Config JSON, risk, sessions, and the `hub.conf` drop-ins are not touched. The hub unit needs no new flags; every new knob has a production default.
+`griff_engine_us100.py` and `griff_engine_gold.py` were not changed by the resilience branch; the double-book guard (PR #31) and the restart adoption change them, and both need `modules/entry_guard.py` and `modules/book_sync.py` deployed alongside (`modules/` is imported from the engine script directory). Config JSON, risk, sessions, and the `hub.conf` drop-ins are not touched. The hub unit needs no new flags; every new knob has a production default.
 
 Running processes still execute the old code until restarted. Nothing changes until step 3.
 
