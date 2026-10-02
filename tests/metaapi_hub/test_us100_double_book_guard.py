@@ -280,13 +280,14 @@ def test_entry_is_blocked_until_a_position_read_succeeds_after_an_ambiguous_erro
         try:
             real_get_positions_rest = engine.wrapper.get_positions_rest
 
-            # The pre-entry read must succeed (flat) so the order is sent; the
-            # post-error read must fail so the engine cannot reconcile yet.
+            # The startup book sync and the pre-entry read must succeed (flat)
+            # so the order is sent; the post-error read must fail so the
+            # engine cannot reconcile yet.
             reads = {"count": 0}
 
             async def flaky_reads() -> list:
                 reads["count"] += 1
-                if reads["count"] == 1:
+                if reads["count"] <= 2:
                     return await real_get_positions_rest()
                 raise RuntimeError("TooManyRequests: simulated")
 
