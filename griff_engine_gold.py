@@ -26,6 +26,15 @@ from modules.book_sync import (
     adopted_position_record,
     describe_position,
 )
+from modules.entry_guard import (
+    describe_place_error,
+    is_ambiguous_place_error,
+)
+
+# Seconds to wait after an ambiguous place error before the reconciling
+# position read. A fill reported right as the acknowledgement is lost can
+# take a moment to show up in the position list. Same value as US100.
+POST_PLACE_ERROR_SYNC_DELAY_SECONDS = 2.0
 
 # Any open position whose comment starts with this belongs to the Gold book.
 GOLD_COMMENT_PREFIX = "GRIFF_GOLD"
@@ -49,6 +58,13 @@ class GoldEngine:
         self.asian_high = 0.0
         self.asian_low = 0.0
         self.day_triggered = False
+        # Double-book guard state, same shape as US100 (see
+        # modules/entry_guard.py for the 2026-10-02 fill-then-NOT_CONNECTED
+        # race). ``entry_sync_required`` is set by any entry failure and only
+        # cleared by a successful position read; while set, no entry is sent.
+        self.entry_sync_required = False
+        self.last_place_error = None
+        self.post_place_error_sync_delay = POST_PLACE_ERROR_SYNC_DELAY_SECONDS
         
         # Default config values
         self.symbol = "XAUUSD"
@@ -81,11 +97,132 @@ class GoldEngine:
         return await self.book_sync.read_book(self.wrapper)
 
     def adopt_position(self, position, reason):
-        """Switch to IN_TRADE around a position this process did not open. Broker values as-is."""
+        """Switch to IN_TRADE around a position this process did not knowingly open.
 
+        Ticket, size, SL, and TP are taken from the broker as-is. The position
+        is not placed again, closed, or modified by adopting it.
+        """
+
+        # When an entry attempt is still unreconciled, the position being
+        # adopted is that attempt's fill. The strategy already treats a
+        # confirmed fill as today's one trade (``asian_high = 0``,
+        # ``day_triggered``); apply the same here so the engine cannot place a
+        # second Gold trade the same session once the adopted fill closes.
+        own_unreconciled_fill = self.entry_sync_required
         self.active_position = adopted_position_record(position, symbol=self.mt5_symbol(), comment=self.order_comment)
         self.state = "IN_TRADE"
+        self.entry_sync_required = False
+        self.last_place_error = None
+        if own_unreconciled_fill:
+            self.asian_high = 0
+            self.day_triggered = True
         logger.warning(f"Adopting open Gold position {describe_position(position)} -> IN_TRADE. Reason: {reason}")
+
+    # ------------------------------------------------------------------
+    # Double-book guard (ported from griff_engine_us100.py)
+    #
+    # 2026-10-02 on US100: BUY 9.46 was filled by the broker, the hub then
+    # answered NOT_CONNECTED for that same mutation, the engine logged the
+    # failure and stayed SEARCHING, and five minutes later it placed BUY
+    # 8.88 on top of the live 9.46. Gold's place path had the identical
+    # shape. Every Gold entry now goes through ``place_entry`` which
+    # (a) refuses to send unless a fresh position read shows the book flat
+    # and (b) reconciles against positions after any place error.
+    # ------------------------------------------------------------------
+
+    async def confirm_flat_before_entry(self):
+        """Return True only when a successful position read shows no Gold book.
+
+        Any other outcome blocks entry: a failed read leaves the state
+        unknown, and a matching position means the previous entry (or
+        another process) already holds the book, so we adopt it instead.
+        """
+
+        matched = await self.fetch_engine_positions()
+        if matched is None:
+            logger.warning("Cannot confirm the Gold book is flat (position read failed). No new entry.")
+            return False
+        if matched:
+            self.adopt_position(matched[0], "pre-entry position check found an open Gold position")
+            if len(matched) > 1:
+                logger.error(
+                    f"{len(matched)} open Gold positions found ({[p.get('id') for p in matched]}). "
+                    "This engine will manage the first and will not add to the book."
+                )
+            return False
+        if self.entry_sync_required:
+            logger.info("Position sync confirmed the Gold book is flat after the last failed entry; entries re-enabled.")
+        self.entry_sync_required = False
+        self.last_place_error = None
+        return True
+
+    async def reconcile_after_place_error(self, exc):
+        """A place error is not proof of no fill. Sync positions before anything else."""
+
+        self.last_place_error = exc
+        self.entry_sync_required = True
+        if is_ambiguous_place_error(exc):
+            logger.error(
+                f"Ambiguous place result ({describe_place_error(exc)}). The order may have filled; "
+                "syncing positions before any further entry."
+            )
+            if self.post_place_error_sync_delay > 0:
+                await asyncio.sleep(self.post_place_error_sync_delay)
+        else:
+            logger.info(
+                f"Order was refused before reaching the broker ({describe_place_error(exc)}); "
+                "confirming the book is flat before the next entry."
+            )
+        await self.confirm_flat_before_entry()
+
+    async def place_entry(self, trend, lots, sl, tp):
+        """Send one market entry, guarded on both sides by a position sync.
+
+        Returns True only when this call confirmed a new Gold position: the
+        order succeeded, or it errored and the post-error sync found the
+        fill. The caller's one-trade-per-day bookkeeping keys off that.
+        """
+
+        if self.entry_sync_required:
+            logger.warning("A previous entry attempt is still unreconciled; syncing positions before this one.")
+        if not await self.confirm_flat_before_entry():
+            logger.warning(f"Skipping {trend} {lots} lots: the Gold book is not confirmed flat.")
+            return False
+
+        logger.info(f"Placing {trend} {lots} lots. SL: {sl}, TP: {tp}")
+        options = {"comment": self.order_comment}
+        try:
+            if trend == 'BUY':
+                res = await self.wrapper.connection.create_market_buy_order(
+                    self.mt5_symbol(), lots, stop_loss=round(sl, 2), take_profit=round(tp, 2), options=options
+                )
+            else:
+                res = await self.wrapper.connection.create_market_sell_order(
+                    self.mt5_symbol(), lots, stop_loss=round(sl, 2), take_profit=round(tp, 2), options=options
+                )
+        except Exception as e:
+            logger.error(f"Failed to place order: {e}")
+            await self.reconcile_after_place_error(e)
+            return self.state == "IN_TRADE"
+
+        logger.info(f"Order Success: {res}")
+        result = res if isinstance(res, dict) else {}
+        self.active_position = adopted_position_record(
+            {
+                "id": str(result.get("positionId") or result.get("orderId") or ""),
+                "symbol": self.mt5_symbol(),
+                "type": "POSITION_TYPE_BUY" if trend == 'BUY' else "POSITION_TYPE_SELL",
+                "volume": lots,
+                "openPrice": result.get("openPrice"),
+                "stopLoss": round(sl, 2),
+                "takeProfit": round(tp, 2),
+                "comment": self.order_comment,
+            }
+        )
+        self.state = "IN_TRADE"
+        self.entry_sync_required = False
+        self.last_place_error = None
+        return True
 
     async def sync_book_with_broker(self, reason):
         """Startup / reconnect sync: adopt an open Gold position regardless of the session window."""
@@ -189,6 +326,14 @@ class GoldEngine:
             # is not flat: evaluate no setup until a read succeeds.
             return
 
+        if self.state == "SEARCHING" and self.entry_sync_required:
+            # A previous entry attempt ended in an error and no position read
+            # has succeeded since. Reconcile first; this may adopt a fill
+            # (-> IN_TRADE) or re-enable entries. Either way, no setup is
+            # evaluated until the book state is known.
+            await self.confirm_flat_before_entry()
+            return
+
         if self.state == "SEARCHING" and not self.day_triggered:
             # Capture Asian Range at exactly 03:00 EST
             if time_str == "03:00":
@@ -229,37 +374,9 @@ class GoldEngine:
                             sl = entry_price - sl_dist if trend == 'BUY' else entry_price + sl_dist
                             tp = entry_price + (3.0 * current_atr) if trend == 'BUY' else entry_price - (3.0 * current_atr)
                             
-                            logger.info(f"Placing {trend} {lots} lots. SL: {sl}, TP: {tp}")
-                            options = {"comment": self.order_comment}
-                            
-                            try:
-                                if trend == 'BUY':
-                                    res = await self.wrapper.connection.create_market_buy_order(
-                                        self.wrapper._to_mt5(self.symbol), lots, stop_loss=round(sl, 2), take_profit=round(tp, 2), options=options
-                                    )
-                                else:
-                                    res = await self.wrapper.connection.create_market_sell_order(
-                                        self.wrapper._to_mt5(self.symbol), lots, stop_loss=round(sl, 2), take_profit=round(tp, 2), options=options
-                                    )
-                                logger.info(f"Order Success: {res}")
-                                result = res if isinstance(res, dict) else {}
-                                self.active_position = adopted_position_record(
-                                    {
-                                        "id": str(result.get("positionId") or result.get("orderId") or ""),
-                                        "symbol": self.mt5_symbol(),
-                                        "type": "POSITION_TYPE_BUY" if trend == 'BUY' else "POSITION_TYPE_SELL",
-                                        "volume": lots,
-                                        "openPrice": result.get("openPrice"),
-                                        "stopLoss": round(sl, 2),
-                                        "takeProfit": round(tp, 2),
-                                        "comment": self.order_comment,
-                                    }
-                                )
-                                self.state = "IN_TRADE"
+                            if await self.place_entry(trend, lots, sl, tp):
                                 self.asian_high = 0 # Prevent multiple triggers
                                 self.day_triggered = True # One trade per day limit
-                            except Exception as e:
-                                logger.error(f"Failed to place order: {e}")
 
         elif self.state == "IN_TRADE":
             # Check if position is still open. A failed read is "unknown",
