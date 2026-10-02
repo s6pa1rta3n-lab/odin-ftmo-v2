@@ -208,6 +208,23 @@ def is_inside_bar(current: Dict[str, Any], previous: Dict[str, Any]) -> bool:
     )
 
 
+def coerce_utc_datetime(value: Any) -> Optional[datetime]:
+    """Normalize a broker timestamp (datetime or ISO-8601 string) to an aware UTC datetime.
+
+    Returns:
+        Aware UTC datetime, or None when the value cannot be interpreted.
+    """
+    if isinstance(value, datetime):
+        return value if value.tzinfo is not None else value.replace(tzinfo=timezone.utc)
+    if isinstance(value, str):
+        try:
+            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+        return parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=timezone.utc)
+    return None
+
+
 def calculate_position_size(
     equity: float,
     atr_14: float,
@@ -499,6 +516,16 @@ class GriffLiveEngine:
         self.position_sync_failures: int = 0
         self.last_candle_count: int = 0
 
+        # Order ids whose cancel was requested but the broker has not yet
+        # confirmed removal (order id -> number of cancel attempts). An id stays
+        # here, and in its pending_*_order_id slot, until the order book no
+        # longer lists it. Not persisted: on restart the broker book is re-read
+        # by reconcile_griff_pending_orders() and tracking is rebuilt from it.
+        self.unconfirmed_cancel_order_ids: Dict[str, int] = {}
+        self.pending_orders_reconciled: bool = False
+        self.cycle_count: int = 0
+        self._last_cancel_attempt_cycle: int = -1
+
         self.is_running: bool = False
         self.halted: bool = False
 
@@ -733,37 +760,258 @@ class GriffLiveEngine:
 
         return True
 
-    async def cancel_pending_breakout_orders(self) -> None:
-        """Cancel existing pending Buy Stop and Sell Stop breakout orders."""
-        if not self.wrapper or not hasattr(self.wrapper, "cancel_order"):
-            return
+    def _mt5_symbol(self) -> str:
+        """Return the broker-side symbol name for this engine's symbol."""
+        if self.wrapper is not None and hasattr(self.wrapper, "_to_mt5"):
+            return self.wrapper._to_mt5(self.symbol)
+        return self.symbol
 
-        order_ids_to_cancel: List[str] = []
-        if self.pending_buy_order_id:
-            order_ids_to_cancel.append(self.pending_buy_order_id)
+    def _tracked_pending_order_ids(self) -> List[str]:
+        """Return the order ids currently tracked as this engine's breakout legs."""
+        return [str(oid) for oid in (self.pending_buy_order_id, self.pending_sell_order_id) if oid]
+
+    def has_unfinished_pending_cancels(self) -> bool:
+        """True while any GRIFF pending order still needs a cancel or a cancel confirmation."""
+        return bool(self.unconfirmed_cancel_order_ids)
+
+    def _can_verify_order_book(self) -> bool:
+        """True when the wrapper exposes an order-book read usable for cancel confirmation."""
+        return self.wrapper is not None and hasattr(self.wrapper, "get_orders_rest")
+
+    async def fetch_griff_pending_orders(self) -> Optional[List[Dict[str, Any]]]:
+        """Read the broker order book and return GRIFF_ pending orders on this symbol.
+
+        Returns:
+            List of order dicts (possibly empty) when the book was read
+            successfully; None when the book could not be read. None must never
+            be treated as "no orders": it means the broker state is unknown.
+        """
+        if not self._can_verify_order_book():
+            return None
+        try:
+            orders = await self.wrapper.get_orders_rest()
+        except Exception as err:
+            logger.warning("Order book read failed: %s", err)
+            return None
+        if orders is None:
+            return None
+
+        mt5_sym = self._mt5_symbol()
+        griff_orders: List[Dict[str, Any]] = []
+        for o in orders:
+            cid = str(o.get("comment", "") or o.get("clientId", ""))
+            if o.get("symbol") == mt5_sym and cid.startswith("GRIFF_"):
+                griff_orders.append(o)
+        return griff_orders
+
+    @staticmethod
+    def _cancel_request_error(result: Any) -> Optional[str]:
+        """Extract an error message from a cancel_order result, or None if it was accepted.
+
+        MetaApiWrapper.cancel_order swallows broker exceptions and returns
+        ``{"status": "REJECTED", "msg": ...}``; that return value was previously
+        discarded, which is why "Market is closed" never reached the state machine.
+        """
+        if isinstance(result, dict):
+            status = str(result.get("status", "")).upper()
+            if status in ("REJECTED", "ERROR", "BROKER_ERROR", "FAILED"):
+                return str(result.get("msg") or result.get("message") or status)
+        return None
+
+    def _mark_order_gone(self, order_id: str) -> None:
+        """Drop an order id from every tracking structure once the broker no longer lists it."""
+        self.unconfirmed_cancel_order_ids.pop(order_id, None)
+        if self.pending_buy_order_id is not None and str(self.pending_buy_order_id) == order_id:
             self.pending_buy_order_id = None
-        if self.pending_sell_order_id:
-            order_ids_to_cancel.append(self.pending_sell_order_id)
+        if self.pending_sell_order_id is not None and str(self.pending_sell_order_id) == order_id:
             self.pending_sell_order_id = None
 
-        for oid in order_ids_to_cancel:
-            logger.info("Canceling pending breakout order %s", oid)
-            try:
-                await self.wrapper.cancel_order(oid)
-            except Exception as err:
-                logger.warning("Order cancellation notice for %s: %s", oid, err)
+    async def cancel_orders_until_confirmed(self, order_ids: List[str]) -> bool:
+        """Request cancellation of the given GRIFF order ids and confirm against the order book.
 
-        try:
-            open_orders = await self.wrapper.get_orders_rest()
-            if open_orders:
-                mt5_sym = self.wrapper._to_mt5(self.symbol)
-                for o in open_orders:
-                    cid = str(o.get("comment", "") or o.get("clientId", ""))
-                    if o.get("symbol") == mt5_sym and cid.startswith("GRIFF_"):
-                        logger.info("Canceling stray Griff pending order %s", o["id"])
-                        await self.wrapper.cancel_order(o["id"])
-        except Exception as err:
-            logger.warning("Error checking stray pending orders: %s", err)
+        Retry rule: an order id is forgotten only when the broker order book no
+        longer lists it. A rejected or failed cancel request (for example
+        ``BROKER_ERROR Market is closed``), an exception, or an unreadable order
+        book all keep the id tracked in ``unconfirmed_cancel_order_ids`` (and in
+        its ``pending_*_order_id`` slot) so the next cycle retries. A cancel
+        error on an order the book no longer lists (already filled or deleted
+        manually) counts as confirmation that it is gone.
+
+        Args:
+            order_ids: Order ids to cancel. Duplicates are ignored.
+
+        Returns:
+            True only if every requested id is confirmed absent from the broker.
+        """
+        ids = list(dict.fromkeys(str(oid) for oid in order_ids if oid))
+        if not ids:
+            return True
+        self._last_cancel_attempt_cycle = self.cycle_count
+
+        if not self.wrapper or not hasattr(self.wrapper, "cancel_order"):
+            for oid in ids:
+                self.unconfirmed_cancel_order_ids.setdefault(oid, 0)
+            logger.error("Cannot cancel GRIFF pending orders %s: broker wrapper unavailable. Keeping them tracked.", ids)
+            return False
+
+        request_errors: Dict[str, Optional[str]] = {}
+        for oid in ids:
+            attempt = self.unconfirmed_cancel_order_ids.get(oid, 0) + 1
+            logger.info("Canceling pending breakout order %s (attempt %d)", oid, attempt)
+            try:
+                result = await self.wrapper.cancel_order(oid)
+                request_errors[oid] = self._cancel_request_error(result)
+            except Exception as err:
+                request_errors[oid] = str(err)
+            if request_errors[oid]:
+                logger.warning("Cancel request for order %s failed: %s", oid, request_errors[oid])
+
+        remaining = await self.fetch_griff_pending_orders()
+        if remaining is None:
+            if not self._can_verify_order_book():
+                # No order book available at all: the cancel response is the
+                # only evidence there is, so an accepted request is treated as confirmed.
+                for oid in ids:
+                    if request_errors.get(oid) is None:
+                        self._mark_order_gone(oid)
+                    else:
+                        self.unconfirmed_cancel_order_ids[oid] = self.unconfirmed_cancel_order_ids.get(oid, 0) + 1
+                return not any(oid in self.unconfirmed_cancel_order_ids for oid in ids)
+
+            for oid in ids:
+                self.unconfirmed_cancel_order_ids[oid] = self.unconfirmed_cancel_order_ids.get(oid, 0) + 1
+            logger.warning(
+                "Order book unavailable; cannot confirm cancellation of %s. Keeping tracked for retry.", ids
+            )
+            return False
+
+        remaining_ids = {str(o.get("id")) for o in remaining}
+        all_confirmed = True
+        for oid in ids:
+            if oid in remaining_ids:
+                all_confirmed = False
+                self.unconfirmed_cancel_order_ids[oid] = self.unconfirmed_cancel_order_ids.get(oid, 0) + 1
+                logger.warning(
+                    "Broker still lists GRIFF pending order %s after cancel attempt %d (%s). "
+                    "Keeping it tracked; will retry next cycle.",
+                    oid,
+                    self.unconfirmed_cancel_order_ids[oid],
+                    request_errors.get(oid) or "request accepted but order still working",
+                )
+            else:
+                if request_errors.get(oid):
+                    logger.info("Order %s is no longer on the broker book; treating failed cancel as already gone.", oid)
+                else:
+                    logger.info("Broker confirmed pending order %s is gone.", oid)
+                self._mark_order_gone(oid)
+        return all_confirmed
+
+    async def cancel_pending_breakout_orders(self) -> bool:
+        """Cancel this engine's pending breakout legs and any stray GRIFF_ pending on the symbol.
+
+        Covers the tracked Buy Stop / Sell Stop ids, every id whose earlier
+        cancel is still unconfirmed, and any other GRIFF_ pending order the
+        broker lists for this symbol. Nothing is forgotten until the broker
+        order book confirms it is gone (see cancel_orders_until_confirmed).
+
+        Returns:
+            True only when the broker confirms no tracked or stray GRIFF pending remains.
+        """
+        order_ids = self._tracked_pending_order_ids() + list(self.unconfirmed_cancel_order_ids)
+
+        book = await self.fetch_griff_pending_orders()
+        if book is not None:
+            known = set(order_ids)
+            for o in book:
+                oid = str(o.get("id"))
+                if oid not in known:
+                    logger.info("Canceling stray Griff pending order %s", oid)
+                    order_ids.append(oid)
+
+        if not order_ids:
+            return True
+        return await self.cancel_orders_until_confirmed(order_ids)
+
+    async def retry_unconfirmed_cancels(self) -> bool:
+        """Re-attempt cancels whose removal the broker has not confirmed yet."""
+        if not self.unconfirmed_cancel_order_ids:
+            return True
+        return await self.cancel_orders_until_confirmed(list(self.unconfirmed_cancel_order_ids))
+
+    async def reconcile_griff_pending_orders(self) -> bool:
+        """Restart/reconcile path: account for every GRIFF_ pending order on this symbol.
+
+        A fresh process starts with no tracked ids, so without this step a
+        pending order left by the previous process (for example one whose
+        cancel failed with "Market is closed") would keep working at the broker
+        with nobody tracking it. Each untracked GRIFF_ pending is classified by
+        the hour it was placed:
+
+        - Placed in the current UTC hour: its setup window (the completed bar
+          before placement) is still live, so it is re-adopted into the
+          matching pending_*_order_id slot and the state machine resumes
+          PENDING_PLACED exactly as if the process had never restarted. Normal
+          window expiry then cancels it on the next completed bar.
+        - Placed in an earlier hour, with an unparseable time, with an unknown
+          type, or when its slot is already taken: its window has expired. It is
+          cancelled through cancel_orders_until_confirmed and stays tracked in
+          unconfirmed_cancel_order_ids until the broker confirms it is gone.
+
+        Returns:
+            True once the order book was read and classified (even if some
+            cancels are still unconfirmed); False if the book could not be read,
+            in which case the next cycle retries the whole reconcile.
+        """
+        book = await self.fetch_griff_pending_orders()
+        if book is None:
+            logger.warning("Pending order reconcile deferred: broker order book unavailable.")
+            return False
+
+        tracked = set(self._tracked_pending_order_ids())
+        now_hour = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0)
+        expired_ids: List[str] = []
+
+        for o in book:
+            oid = str(o.get("id"))
+            if oid in tracked or oid in self.unconfirmed_cancel_order_ids:
+                continue
+
+            placed_at = coerce_utc_datetime(o.get("time"))
+            placed_hour = placed_at.replace(minute=0, second=0, microsecond=0) if placed_at else None
+            order_type = str(o.get("type", ""))
+            slot = "buy" if order_type == "ORDER_TYPE_BUY_STOP" else "sell" if order_type == "ORDER_TYPE_SELL_STOP" else None
+            slot_free = (slot == "buy" and not self.pending_buy_order_id) or (
+                slot == "sell" and not self.pending_sell_order_id
+            )
+
+            if placed_hour == now_hour and slot_free and self.state in ("SEARCHING", "PENDING_PLACED"):
+                if slot == "buy":
+                    self.pending_buy_order_id = oid
+                else:
+                    self.pending_sell_order_id = oid
+                self.pending_setup_bar_time = placed_hour - timedelta(hours=1)
+                self.state = "PENDING_PLACED"
+                logger.info(
+                    "Re-adopted live GRIFF pending %s order %s placed %s (setup bar %s).",
+                    order_type,
+                    oid,
+                    placed_at.isoformat(),
+                    self.pending_setup_bar_time.isoformat(),
+                )
+            else:
+                logger.warning(
+                    "Found GRIFF pending order %s (%s, placed %s) outside its setup window with no tracking. Canceling.",
+                    oid,
+                    order_type or "unknown type",
+                    placed_at.isoformat() if placed_at else "unknown time",
+                )
+                expired_ids.append(oid)
+
+        if expired_ids:
+            confirmed = await self.cancel_orders_until_confirmed(expired_ids)
+            if not confirmed and self.state == "SEARCHING":
+                self.state = "CANCEL_PENDING"
+        return True
 
     async def place_pending_breakout_orders(
         self,
@@ -957,11 +1205,14 @@ class GriffLiveEngine:
                 )
                 self.state = "IN_TRADE"
                 await self.cancel_pending_breakout_orders()
+            self.pending_orders_reconciled = True
         else:
             if self.state == "IN_TRADE":
                 logger.info("Active trade closed on broker (confirmed by a successful position read). Returning state to SEARCHING.")
                 self.active_position = None
                 self.state = "SEARCHING"
+            if not self.pending_orders_reconciled:
+                self.pending_orders_reconciled = await self.reconcile_griff_pending_orders()
 
     async def ratchet_trailing_stop(self, candles: List[Dict[str, Any]], atr_14: float) -> None:
         """Evaluate structural trailing stop ratchet upon 1H bar close.
@@ -1006,6 +1257,7 @@ class GriffLiveEngine:
         Returns:
             Dictionary containing cycle summary and executed actions.
         """
+        self.cycle_count += 1
         info = await self.fetch_account_information_safe()
         if info:
             self.current_equity = float(info.get("equity", self.current_equity))
@@ -1014,6 +1266,33 @@ class GriffLiveEngine:
             return {"status": "HALTED", "reason": "Risk limit breach"}
 
         await self.synchronize_active_positions()
+
+        if self.state == "SEARCHING" and self.has_unfinished_pending_cancels():
+            # A GRIFF pending whose cancel is unconfirmed is still working at the
+            # broker; do not search for a new setup on top of it.
+            self.state = "CANCEL_PENDING"
+
+        needs_cancel_retry = self.has_unfinished_pending_cancels() or (
+            self.state == "CANCEL_PENDING" and bool(self._tracked_pending_order_ids())
+        )
+        if needs_cancel_retry and self._last_cancel_attempt_cycle != self.cycle_count:
+            # One cancel attempt per cycle. synchronize_active_positions may
+            # already have attempted this cycle (position adoption / reconcile).
+            if self.state == "CANCEL_PENDING":
+                await self.cancel_pending_breakout_orders()
+            else:
+                # IN_TRADE (unfilled opposite leg) or PENDING_PLACED (orphans
+                # found at restart): retry without disturbing the current state.
+                await self.retry_unconfirmed_cancels()
+
+        if self.state == "CANCEL_PENDING":
+            if self.has_unfinished_pending_cancels() or self._tracked_pending_order_ids():
+                return {
+                    "status": "CANCEL_PENDING",
+                    "unconfirmed_cancel_order_ids": dict(self.unconfirmed_cancel_order_ids),
+                }
+            logger.info("Broker confirmed all GRIFF pending orders are gone. Returning state to SEARCHING.")
+            self.state = "SEARCHING"
 
         candles = await self.fetch_completed_1h_candles(limit=60)
         self.last_candle_count = len(candles)
@@ -1081,8 +1360,20 @@ class GriffLiveEngine:
         if self.state == "PENDING_PLACED":
             if self.pending_setup_bar_time and latest_bar_time != self.pending_setup_bar_time:
                 logger.info("Breakout window for setup bar %s expired unfilled. Canceling pending orders.", self.pending_setup_bar_time)
-                await self.cancel_pending_breakout_orders()
-                self.state = "SEARCHING"
+                self.state = "CANCEL_PENDING"
+                if await self.cancel_pending_breakout_orders():
+                    self.state = "SEARCHING"
+                else:
+                    logger.warning(
+                        "Cancel of expired GRIFF pending order(s) %s not confirmed by broker. "
+                        "Holding CANCEL_PENDING (no new setups) and retrying every cycle.",
+                        list(self.unconfirmed_cancel_order_ids),
+                    )
+                    return {
+                        "status": "CANCEL_PENDING",
+                        "unconfirmed_cancel_order_ids": dict(self.unconfirmed_cancel_order_ids),
+                        "atr_14": atr_14,
+                    }
 
         if self.state == "SEARCHING":
             mother_bar = candles[-2]
@@ -1137,6 +1428,7 @@ class GriffLiveEngine:
                     "pending_buy_order_id": self.pending_buy_order_id,
                     "pending_sell_order_id": self.pending_sell_order_id,
                     "pending_setup_bar_time": self.pending_setup_bar_time.isoformat() if hasattr(self.pending_setup_bar_time, "isoformat") else self.pending_setup_bar_time,
+                    "unconfirmed_cancel_order_ids": dict(self.unconfirmed_cancel_order_ids),
                     "history_count": self.last_candle_count,
                     "candle_fetch_failures": self.candle_fetch_failures,
                     "position_sync_failures": self.position_sync_failures,
