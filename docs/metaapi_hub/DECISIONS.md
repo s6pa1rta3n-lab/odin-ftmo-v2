@@ -50,6 +50,24 @@ Conclusion: the hypothesis holds. The hub is the fix we implemented. We did not 
 - `griff_engine_us100.py` and `griff_engine_gold.py` imported `MetaApiWrapper` at import time, which imports the SDK. They now import the factory. With the flag off, the SDK is imported when the engine is constructed, which is the same dependency as before.
 - Production Python on the VM is 3.9 (`PROJECT.md`). The hub uses `from __future__ import annotations` and does not use `asyncio.timeout` or `match`.
 
+## 2026-10-02 resilience pass
+
+Input: the 04:43–06:43 EDT timeout audit on matt-berserker (hub `TimeoutError`×77, `TimeoutException`×32, `TooManyRequests`×4, one 504 on BTC candles, recurring resync warnings; BTC at `Accumulating 0/50` since 06:25 while `IN_TRADE`, process alive).
+
+Root cause of the BTC wedge, reproduced locally against the shadow hub: a 1000-bar candle reply is larger than asyncio's 64 KiB default `readline` limit. The client's reader task raised and exited; every later request waited on a future nobody would resolve; the engine logged timeouts and `0/50` on each poll with no path out. Shadow and test traffic never hit this because `InMemoryBroker` returns 40 bars. Secondary amplifiers: one request at a time per connection (an abandoned candle request delayed the next account read into its own deadline), one RPC at a time across all engines, no client reconnect after a hub restart.
+
+Decisions:
+
+- **Frame limit** is `MAX_MESSAGE_BYTES` on both ends. The protocol already defined that constant for `dumps`/`loads`; the streams simply were not told.
+- **Concurrent dispatch per connection**, with a per-connection write lock. In-flight work is not cancelled when a client disconnects: a mutation that reached the broker must finish, and a shared candle flight is still useful to the other engines. Joiners await the flight through `asyncio.shield` for the same reason.
+- **Bounded read concurrency (4) instead of strict serialization.** The lock protected nothing the SDK requires; it existed to keep `max_rpc_depth` observable. It is kept for mutations, which are the only calls with a double-fill risk. `--read-concurrency 1` restores the previous behaviour if a reviewer prefers it.
+- **Retries are for idempotent reads only.** TIMEOUT, TooManyRequests, and 504 are retried with capped, jittered exponential backoff. A timeout still never opens a new synchronization. Mutations stay at one attempt.
+- **Stale candle fallback, 300 s, hub-side only.** Completed 1H bars older than the current hour do not change, so a five-minute-old set is correct data served late. It is served only after a full retry cycle fails, logged at WARNING, counted in health, and never used by the engine for anything the fresh set would not have been used for. No stale data is kept in the engine; entry scanning still requires 50 fresh bars from the call that just returned.
+- **Client reattach is the engine's recovery, not a private sync.** On socket loss the client reopens the socket and re-sends `hello`. The fail-closed rule from the first PR stands: if the hub is unreachable the engine errors, it does not construct `MetaApiWrapper`.
+- **Engine: `IN_TRADE` before the history gate.** The 50-bar requirement protects EMA-50 and ADX, which only entries use. Position management needs 15 bars for ATR-14 and 3 for the structural stop. Running it with 15–49 bars produces the same numbers as with 60, so this is sequencing, not a strategy change. Under 15 bars the engine holds and says so.
+- **A failed position read is not a flat book.** `fetch_positions_safe` distinguishes `None` from `[]`. This closes the `update_log.md` path where a hidden position led to a duplicate order. One confirmed empty read still ends `IN_TRADE`, as before; a confirmation window was considered and rejected because it would delay the strategy's re-arm after a stop-out, which is a strategy change.
+- **Not changed, deliberately:** `day_start_equity` resetting on restart, engine poll interval and per-call deadlines (10/12/15 s), `cancel_pending_breakout_orders` sweeping stray `GRIFF_` pending orders on adoption (strategy behaviour: the OCO leg), US100 and Gold engine code (they benefit from the hub and client fixes without edits).
+
 ## Cutover approval
 
 Odin approved production cutover on 2026-10-01 after Stage 2 (read-only live) and the Stage 3 safe canary were documented. Operators then reported Stage 4 PASS the same day (~12:44–12:49 EDT). The approval, the installed unit, and the rollback are in [CUTOVER.md](CUTOVER.md) and [evidence/2026-10-01-stage4-cutover.md](evidence/2026-10-01-stage4-cutover.md). The commits that recorded this do not install units or change the VM. The report says strategy and config JSON were unchanged and only factory wiring was added. With `ODIN_METAAPI_HUB` unset, that factory returns `MetaApiWrapper`. The hub remains plumbing in front of the existing engines.

@@ -284,7 +284,15 @@ class MetaApiBroker:
     ``repr`` or log lines.
     """
 
-    def __init__(self, token: str, account_id: str, *, rpc_timeout: float = 20.0) -> None:
+    def __init__(
+        self,
+        token: str,
+        account_id: str,
+        *,
+        rpc_timeout: float = 20.0,
+        sync_timeout: float | None = None,
+        close_timeout: float = 10.0,
+    ) -> None:
         if not token:
             raise HubError("CONFIG", "MetaAPI token is empty")
         if not account_id:
@@ -292,6 +300,10 @@ class MetaApiBroker:
         self._token = token
         self.account_id = account_id
         self.rpc_timeout = rpc_timeout
+        # wait_synchronized legitimately takes longer than a single RPC after
+        # a reconnect; give it its own budget instead of the RPC timeout.
+        self.sync_timeout = sync_timeout if sync_timeout is not None else max(rpc_timeout, 60.0)
+        self.close_timeout = close_timeout
         self._api: Any = None
         self._account: Any = None
         self._streaming: Any = None
@@ -321,14 +333,20 @@ class MetaApiBroker:
             ) from exc
 
         try:
-            if self._streaming is None:
+            # The SDK client and account handle are created once and reused
+            # across reconnects. Re-creating MetaApi(token) on every reconnect
+            # left the previous client's websocket alive, which is one more
+            # connection against the same account each time.
+            if self._api is None:
                 self._api = MetaApi(self._token)
+            if self._account is None:
                 self._account = await self._call(self._api.metatrader_account_api.get_account(self.account_id))
+            if self._streaming is None:
                 self._streaming = self._account.get_streaming_connection()
                 self._rpc = self._account.get_rpc_connection()
                 await self._call(self._streaming.connect())
                 await self._call(self._rpc.connect())
-            await self._call(self._streaming.wait_synchronized())
+            await self._call(self._streaming.wait_synchronized(), timeout=self.sync_timeout)
         except Exception:
             await self.close()
             raise
@@ -337,7 +355,12 @@ class MetaApiBroker:
         log.info("MetaAPI synchronization established for account %s", self.account_id)
 
     async def close(self) -> None:
-        """Drop both connections so the account synchronization slot is released."""
+        """Drop both connections so the account synchronization slot is released.
+
+        Each close is bounded by ``close_timeout``. The SDK write loop has
+        hung on close before (see RUNBOOK); an unbounded close here would be
+        awaited under the owner's sync lock and freeze every engine read.
+        """
 
         self.close_calls += 1
         self.connected = False
@@ -345,7 +368,12 @@ class MetaApiBroker:
             if conn is None:
                 continue
             try:
-                await conn.close()
+                await asyncio.wait_for(conn.close(), timeout=self.close_timeout)
+            except asyncio.TimeoutError:
+                log.warning(
+                    "MetaAPI connection close exceeded %.0fs; abandoning it and continuing",
+                    self.close_timeout,
+                )
             except Exception as exc:
                 log.warning("Error closing MetaAPI connection: %s", type(exc).__name__)
         self._rpc = None
@@ -492,11 +520,12 @@ class MetaApiBroker:
         self.order_calls += 1
         self.mutation_calls += 1
 
-    async def _call(self, coro: Awaitable[Any]) -> Any:
+    async def _call(self, coro: Awaitable[Any], *, timeout: float | None = None) -> Any:
+        budget = self.rpc_timeout if timeout is None else timeout
         try:
-            return await asyncio.wait_for(coro, timeout=self.rpc_timeout)
+            return await asyncio.wait_for(coro, timeout=budget)
         except asyncio.TimeoutError as exc:
-            raise HubError("TIMEOUT", "MetaAPI call timed out", retryable=True) from exc
+            raise HubError("TIMEOUT", f"MetaAPI call timed out after {budget:.0f}s", retryable=True) from exc
         except Exception as exc:
             mapped = classify_metaapi_error(exc)
             if mapped is exc:

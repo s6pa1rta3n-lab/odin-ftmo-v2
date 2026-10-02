@@ -1,19 +1,38 @@
 """Unix-socket server. Local engines are the only clients.
 
 There is no TCP listener. Authentication is the socket filesystem mode.
+
+Requests on one connection are served concurrently. Before this, a slow
+candle fetch that the engine had already given up on (its ``wait_for``
+expired) still blocked the engine's next account or position request behind
+it, so every follow-up request also timed out. Responses are written under a
+per-connection lock so frames never interleave.
 """
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 from typing import Any
 
 from metaapi_hub.errors import HubError
+from metaapi_hub.locks import LazyLock
 from metaapi_hub.owner import SyncOwner
-from metaapi_hub.protocol import FORBIDDEN_CLIENT_METHODS, dumps, loads
+from metaapi_hub.protocol import FORBIDDEN_CLIENT_METHODS, MAX_MESSAGE_BYTES, dumps, loads
 
 log = logging.getLogger("odin.metaapi_hub.server")
+
+
+class _Connection:
+    """Per-socket state: registration id, write lock, in-flight request tasks."""
+
+    def __init__(self, writer: Any) -> None:
+        self.writer = writer
+        self.client_id: str | None = None
+        self.write_lock = LazyLock()
+        self.tasks: set[asyncio.Task] = set()
+        self.closed = False
 
 
 class HubServer:
@@ -24,16 +43,20 @@ class HubServer:
         self.socket_path = socket_path
         self._server: Any = None
         self._writers: set[Any] = set()
+        self.max_inflight_per_connection = 0
+        self.oversized_frames = 0
 
     async def start(self) -> None:
-        import asyncio
-
         directory = os.path.dirname(self.socket_path)
         if directory:
             os.makedirs(directory, exist_ok=True)
         if os.path.exists(self.socket_path):
             os.unlink(self.socket_path)
-        self._server = await asyncio.start_unix_server(self._handle, path=self.socket_path)
+        self._server = await asyncio.start_unix_server(
+            self._handle,
+            path=self.socket_path,
+            limit=MAX_MESSAGE_BYTES,
+        )
         os.chmod(self.socket_path, 0o660)
         log.info(
             "Hub listening path=%s mode=%s orders_mode=%s",
@@ -66,36 +89,71 @@ class HubServer:
                 log.warning("Could not unlink hub socket: %s", exc)
 
     async def _handle(self, reader: Any, writer: Any) -> None:
-        client_id: str | None = None
+        conn = _Connection(writer)
         self._writers.add(writer)
+        loop = asyncio.get_running_loop()
         try:
             while True:
-                line = await reader.readline()
+                try:
+                    line = await reader.readline()
+                except (ValueError, asyncio.LimitOverrunError) as exc:
+                    self.oversized_frames += 1
+                    log.error(
+                        "Dropping engine connection client=%s: request frame exceeded %d bytes (%s)",
+                        conn.client_id,
+                        MAX_MESSAGE_BYTES,
+                        exc,
+                    )
+                    break
+                except asyncio.IncompleteReadError:
+                    break
                 if not line:
                     break
-                request: dict | None = None
-                try:
-                    request = loads(line)
-                    response = await self._dispatch(request, client_id)
-                except Exception as exc:
-                    request_id = request.get("id") if isinstance(request, dict) else None
-                    response = _error_response(request_id, exc)
-                if (
-                    isinstance(request, dict)
-                    and response.get("ok")
-                    and request.get("method") == "hello"
-                ):
-                    client_id = (response.get("result") or {}).get("client_id")
-                writer.write(dumps(response))
-                await writer.drain()
+                task = loop.create_task(self._serve_one(line, conn))
+                conn.tasks.add(task)
+                task.add_done_callback(conn.tasks.discard)
+                if len(conn.tasks) > self.max_inflight_per_connection:
+                    self.max_inflight_per_connection = len(conn.tasks)
+        except (ConnectionError, OSError) as exc:
+            log.warning("Engine socket error client=%s: %s", conn.client_id, type(exc).__name__)
         finally:
+            conn.closed = True
             self._writers.discard(writer)
-            self.owner.unregister(client_id)
+            self.owner.unregister(conn.client_id)
+            # In-flight work is left to finish: a mutation that already reached
+            # the broker must not be cancelled half-way, and a shared candle
+            # flight is still useful to the other engines. Replies to this
+            # closed socket are discarded in _serve_one.
             writer.close()
             try:
                 await writer.wait_closed()
             except Exception:
                 pass
+
+    async def _serve_one(self, line: bytes, conn: _Connection) -> None:
+        request: dict | None = None
+        try:
+            request = loads(line)
+            response = await self._dispatch(request, conn.client_id)
+        except Exception as exc:
+            request_id = request.get("id") if isinstance(request, dict) else None
+            response = _error_response(request_id, exc)
+        if (
+            isinstance(request, dict)
+            and response.get("ok")
+            and request.get("method") == "hello"
+        ):
+            conn.client_id = (response.get("result") or {}).get("client_id")
+        if conn.closed or conn.writer.is_closing():
+            method = request.get("method") if isinstance(request, dict) else "?"
+            log.info("Engine client=%s left before %s finished; reply discarded", conn.client_id, method)
+            return
+        try:
+            async with conn.write_lock:
+                conn.writer.write(dumps(response))
+                await conn.writer.drain()
+        except (ConnectionError, OSError) as exc:
+            log.warning("Could not write reply to client=%s: %s", conn.client_id, type(exc).__name__)
 
     async def _dispatch(self, request: dict, client_id: str | None) -> dict:
         request_id = request.get("id")
@@ -111,6 +169,9 @@ class HubServer:
         try:
             if method == "health":
                 result = self.owner.snapshot()
+                result["server_max_inflight_per_connection"] = self.max_inflight_per_connection
+                result["server_oversized_frames"] = self.oversized_frames
+                result["max_message_bytes"] = MAX_MESSAGE_BYTES
             elif method == "hello":
                 result = self.owner.register(
                     engine=str(params.get("engine") or "engine"),

@@ -73,9 +73,11 @@ When the engine flag is on, a dead hub does **not** fall back to `MetaApiWrapper
 
 ## Reads and writes
 
-Reads (account, positions, orders, prices, specs, margin, candles) share one RPC lock. On `not connected to broker`, every waiter that saw the same generation shares one reconnect. The owner closes the old slot before opening another, so a reconnect cannot leak a second synchronization.
+Reads (account, positions, orders, prices, specs, margin, candles) run under a small semaphore (`--read-concurrency`, default 4; mutations keep an exclusive lock). On `not connected to broker`, every waiter that saw the same generation shares one reconnect. The owner closes the old slot before opening another, so a reconnect cannot leak a second synchronization. Other retryable errors (TIMEOUT, TooManyRequests, 504) are retried a bounded number of times with capped, jittered exponential backoff; a timeout never opens a new synchronization.
 
-Historical candles are single-flight per `(symbol, timeframe, limit)` and cached for 5 seconds. A 504 is retried on that one flight. Concurrent engines join the flight; they do not each retry.
+Historical candles are single-flight per `(symbol, timeframe, limit)` and cached for 5 seconds. Retryable errors are retried on that one flight. Concurrent engines join the flight through `asyncio.shield`; they do not each retry, and one engine giving up does not cancel the flight. If every attempt fails, the last good set for that key is served while it is younger than `--candle-stale-ttl` (default 300 s), with a warning and a health counter.
+
+Socket frames are newline-delimited JSON up to `MAX_MESSAGE_BYTES` (8 MB); both stream readers are created with that limit because one history page exceeds asyncio's 64 KiB default. Requests on one connection are served concurrently so an abandoned slow request does not delay the next one. The client reattaches to the hub on the next request after the socket drops; it re-sends `hello` and never synchronizes.
 
 Mutations (market, stop, limit, cancel, close, partial close, modify) are never retried. A disconnect during an order returns the error and leaves a resync for the next read. The same engine, method, symbol, side, volume, comment, and prices inside a 3 second window returns the first receipt instead of sending a second order.
 

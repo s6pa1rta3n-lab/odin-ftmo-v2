@@ -1,8 +1,15 @@
 """Single synchronization owner.
 
-Engines never call ``synchronize``. This object does, at most one at a time,
-and serializes RPC on that connection. Read calls may be retried once after a
-disconnect. Order calls are never retried.
+Engines never call ``synchronize``. This object does, at most one at a time.
+Mutations are serialized on that connection. Reads run under a small
+semaphore (``read_concurrency``) so one slow candle RPC does not hold every
+account and position read for all engines behind it. Read calls may be
+retried once after a disconnect and a bounded number of times after a
+retryable upstream error (TIMEOUT, TooManyRequests, 504). Order calls are
+never retried.
+
+Backoff is exponential with a cap and jitter so three engines that hit the
+same upstream hiccup do not retry in lockstep.
 """
 
 from __future__ import annotations
@@ -11,11 +18,12 @@ import asyncio
 import logging
 import math
 import os
+import random
 import time
 import uuid
 from typing import Any, Awaitable, Callable
 
-from metaapi_hub.locks import LazyLock
+from metaapi_hub.locks import LazyLock, LazySemaphore
 from metaapi_hub.errors import (
     DryRunOrderError,
     GatewayTimeoutError,
@@ -41,10 +49,16 @@ class SyncOwner:
         cache_ttl: float = 5.0,
         max_sync_attempts: int = 5,
         backoff_base: float = 0.05,
+        backoff_max: float = 30.0,
+        backoff_jitter: float = 0.25,
         candle_attempts: int = 4,
+        candle_stale_ttl: float = 300.0,
+        read_attempts: int = 3,
+        read_concurrency: int = 4,
         duplicate_window: float = 3.0,
         sleep: Callable[[float], Awaitable[None]] | None = None,
         clock: Callable[[], float] | None = None,
+        rand: Callable[[], float] | None = None,
     ) -> None:
         if mode not in {"shadow", "live"}:
             raise HubError("CONFIG", f"unsupported hub mode {mode}")
@@ -53,6 +67,12 @@ class SyncOwner:
         if mode == "shadow" and orders_mode == "live":
             log.warning("Shadow mode cannot place live orders; forcing orders_mode=dry_run")
             orders_mode = "dry_run"
+        if read_attempts < 1:
+            raise HubError("CONFIG", "read_attempts must be at least 1")
+        if candle_attempts < 1:
+            raise HubError("CONFIG", "candle_attempts must be at least 1")
+        if read_concurrency < 1:
+            raise HubError("CONFIG", "read_concurrency must be at least 1")
         self.broker = broker
         self.mode = mode
         self.orders_mode = orders_mode
@@ -60,27 +80,49 @@ class SyncOwner:
         self.cache_ttl = cache_ttl
         self.max_sync_attempts = max_sync_attempts
         self.backoff_base = backoff_base
+        self.backoff_max = backoff_max
+        self.backoff_jitter = max(0.0, backoff_jitter)
         self.candle_attempts = candle_attempts
+        self.candle_stale_ttl = candle_stale_ttl
+        self.read_attempts = read_attempts
+        self.read_concurrency = read_concurrency
         self.duplicate_window = duplicate_window
         self._sleep = sleep or asyncio.sleep
         self._clock = clock or time.monotonic
+        self._rand = rand or random.random
         self.connected = False
         self.synchronize_calls = 0
         self.sync_attempts = 0
         self.reconnects = 0
         self.candle_fetches = 0
         self.candle_timeouts = 0
+        self.candle_retries = 0
+        self.candle_stale_serves = 0
+        self.read_retries = 0
         self.single_flight_joins = 0
         self.cache_hits = 0
         self.duplicate_suppressions = 0
+        self.last_upstream_error: str | None = None
         self._epoch = 0
         self._sync_lock = LazyLock()
         self._rpc_lock = LazyLock()
+        self._read_gate = LazySemaphore(read_concurrency)
         self._flight_lock = LazyLock()
         self._inflight: dict[tuple, asyncio.Task] = {}
         self._cache: dict[tuple, tuple[float, list]] = {}
+        self._last_good: dict[tuple, tuple[float, list]] = {}
         self._recent_mutations: dict[tuple, tuple[float, dict]] = {}
         self.clients: dict[str, dict] = {}
+
+    def backoff_delay(self, attempt: int) -> float:
+        """Exponential delay for ``attempt`` (1-based), capped, plus jitter.
+
+        ``jitter`` adds up to ``backoff_jitter`` of the capped delay. With
+        ``rand`` pinned to 0 the schedule is exactly ``base * 2**(n-1)``.
+        """
+
+        delay = min(self.backoff_base * (2 ** (attempt - 1)), self.backoff_max)
+        return delay + delay * self.backoff_jitter * self._rand()
 
     def orders_are_live(self) -> bool:
         """Live orders require the process flag and the environment interlock.
@@ -149,6 +191,11 @@ class SyncOwner:
             "client_count": len(self.clients),
             "candle_fetches": self.candle_fetches,
             "candle_timeouts": self.candle_timeouts,
+            "candle_retries": self.candle_retries,
+            "candle_stale_serves": self.candle_stale_serves,
+            "read_retries": self.read_retries,
+            "read_concurrency": self.read_concurrency,
+            "last_upstream_error": self.last_upstream_error,
             "single_flight_joins": self.single_flight_joins,
             "cache_hits": self.cache_hits,
             "duplicate_suppressions": self.duplicate_suppressions,
@@ -196,7 +243,8 @@ class SyncOwner:
             except Exception as exc:
                 last = exc
                 self.connected = False
-                delay = self.backoff_base * (2 ** (attempt - 1))
+                self.last_upstream_error = f"sync: {exc}"
+                delay = self.backoff_delay(attempt)
                 log.warning(
                     "Synchronization attempt %s/%s failed (%s). Backing off %.3fs. Not opening a second slot.",
                     attempt,
@@ -220,22 +268,52 @@ class SyncOwner:
             self.reconnects += 1
             log.info("Sync owner reconnected reconnects=%s epoch=%s", self.reconnects, self._epoch)
 
-    async def read(self, method: str, *args: Any) -> Any:
-        """Run a read RPC. Retry once if the terminal dropped. Never opens a second slot."""
+    async def read(self, method: str, *args: Any, attempts: int | None = None) -> Any:
+        """Run a read RPC. Never opens a second slot.
 
-        await self.ensure_connected()
-        epoch = self._epoch
-        try:
-            async with self._rpc_lock:
-                return await self._invoke(method, *args)
-        except NotConnectedError:
-            log.warning("Read %s saw 'not connected to broker'; one shared reconnect", method)
-            await self._recover(epoch)
-            async with self._rpc_lock:
-                return await self._invoke(method, *args)
+        * ``NotConnectedError`` triggers one shared reconnect, then one resend.
+        * Other retryable errors (TIMEOUT, TooManyRequests, 504) are resent up
+          to ``attempts`` times (default ``read_attempts``) with jittered
+          backoff. Reads are idempotent, so this cannot double-fill.
+        """
+
+        total = self.read_attempts if attempts is None else max(1, attempts)
+        for attempt in range(1, total + 1):
+            await self.ensure_connected()
+            epoch = self._epoch
+            try:
+                try:
+                    async with self._read_gate:
+                        return await self._invoke(method, *args)
+                except NotConnectedError:
+                    log.warning("Read %s saw 'not connected to broker'; one shared reconnect", method)
+                    await self._recover(epoch)
+                    async with self._read_gate:
+                        return await self._invoke(method, *args)
+            except HubError as exc:
+                self.last_upstream_error = f"{method}: {exc}"
+                if not exc.retryable or isinstance(exc, NotConnectedError) or attempt >= total:
+                    raise
+                self.read_retries += 1
+                delay = self.backoff_delay(attempt)
+                log.warning(
+                    "Read %s failed attempt %s/%s (%s). Retrying in %.2fs. The slot is kept; no new sync.",
+                    method,
+                    attempt,
+                    total,
+                    exc,
+                    delay,
+                )
+                await self._sleep(delay)
+        raise AssertionError("unreachable")
 
     async def historical_candles(self, symbol: str, timeframe: str, limit: int | None = None) -> list:
-        """Single-flight candle fetch with a short cache and 504 backoff."""
+        """Single-flight candle fetch with a short cache, backoff, and a stale fallback.
+
+        Joiners await the shared flight through ``asyncio.shield`` so one
+        engine giving up (its ``wait_for`` expired, or its socket closed)
+        cannot cancel the fetch the other engines are still waiting on.
+        """
 
         if limit is not None:
             limit = int(limit)
@@ -253,15 +331,18 @@ class SyncOwner:
                 self.cache_hits += 1
                 return [dict(item) for item in cached[1]]
             task = self._inflight.get(key)
-            if task is None:
+            if task is None or task.done():
+                # A finished task can linger here when every waiter was
+                # cancelled before it completed. Never hand out its old result.
                 task = asyncio.get_running_loop().create_task(
                     self._load_candles(key, symbol, timeframe, limit)
                 )
+                task.add_done_callback(_consume_task_result)
                 self._inflight[key] = task
             else:
                 self.single_flight_joins += 1
         try:
-            result = await task
+            result = await asyncio.shield(task)
             return [dict(item) for item in result]
         finally:
             if task.done():
@@ -270,22 +351,63 @@ class SyncOwner:
                         self._inflight.pop(key, None)
 
     async def _load_candles(self, key: tuple, symbol: str, timeframe: str, limit: int | None) -> list:
-        delay = self.backoff_base
         last: BaseException | None = None
-        for _attempt in range(self.candle_attempts):
+        for attempt in range(1, self.candle_attempts + 1):
             try:
-                raw = await self.read("get_historical_candles", symbol, timeframe, limit)
+                # Candle retries are owned here so the schedule is one loop,
+                # not read_attempts * candle_attempts.
+                raw = await self.read("get_historical_candles", symbol, timeframe, limit, attempts=1)
                 self.candle_fetches += 1
                 normalized = normalize_candles(raw, limit)
-                self._cache[key] = (self._clock(), normalized)
+                now = self._clock()
+                self._cache[key] = (now, normalized)
+                self._last_good[key] = (now, normalized)
                 return [dict(item) for item in normalized]
-            except GatewayTimeoutError as exc:
+            except HubError as exc:
+                if not exc.retryable or isinstance(exc, NotConnectedError):
+                    raise
                 last = exc
-                self.candle_timeouts += 1
-                log.warning("Historical candles 504 for %s %s; retrying in %.3fs", symbol, timeframe, delay)
+                if isinstance(exc, GatewayTimeoutError):
+                    self.candle_timeouts += 1
+                if attempt >= self.candle_attempts:
+                    break
+                self.candle_retries += 1
+                delay = self.backoff_delay(attempt)
+                log.warning(
+                    "Historical candles %s %s failed attempt %s/%s (%s); retrying in %.3fs",
+                    symbol,
+                    timeframe,
+                    attempt,
+                    self.candle_attempts,
+                    exc,
+                    delay,
+                )
                 await self._sleep(delay)
-                delay *= 2
         assert last is not None
+        stale = self._last_good.get(key)
+        if stale is not None:
+            age = self._clock() - stale[0]
+            if age <= self.candle_stale_ttl:
+                self.candle_stale_serves += 1
+                log.warning(
+                    "Historical candles %s %s unavailable after %s attempts (%s). "
+                    "Serving last good set from %.0fs ago (%d bars). Engines keep running; "
+                    "a fresh fetch is attempted on their next poll.",
+                    symbol,
+                    timeframe,
+                    self.candle_attempts,
+                    last,
+                    age,
+                    len(stale[1]),
+                )
+                return [dict(item) for item in stale[1]]
+        log.error(
+            "Historical candles %s %s failed after %s attempts and no recent good set is cached: %s",
+            symbol,
+            timeframe,
+            self.candle_attempts,
+            last,
+        )
         raise last
 
     async def mutate(self, method: str, params: dict, *, engine: str) -> dict:
@@ -381,3 +503,10 @@ class SyncOwner:
     async def _invoke(self, method: str, *args: Any) -> Any:
         func = getattr(self.broker, method)
         return await func(*args)
+
+
+def _consume_task_result(task: asyncio.Task) -> None:
+    """Mark a shared flight's outcome as observed when every waiter already left."""
+
+    if not task.cancelled():
+        task.exception()

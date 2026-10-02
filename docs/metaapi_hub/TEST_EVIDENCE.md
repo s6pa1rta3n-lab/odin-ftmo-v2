@@ -1,5 +1,20 @@
 # Test evidence
 
+## 2026-10-02 resilience branch (`cursor/metaapi-hub-resilience-4d1b`)
+
+Local, no MetaAPI contact, no token, no orders. `sh scripts/run_metaapi_hub_tests.sh`:
+
+| Interpreter | Result |
+| --- | --- |
+| Python 3.12.3 | `43 passed, 1 skipped`, `shadow probe ok 1 orders 0` |
+| Python 3.9.25 (uv-managed venv, pytest + pytz only) | `43 passed, 1 skipped` |
+
+The skip is the installed-`MetaApiWrapper` test; the SDK is not present here. New files: `tests/metaapi_hub/test_resilience.py` (8 tests: >64 KiB candle frame, head-of-line blocking, hub restart reattach, read retry/backoff with mutations not retried, candle retry then stale fallback, stale TTL 0, shared flight survives a cancelled waiter, health transport fields) and `tests/metaapi_hub/test_engine_open_position_resilience.py` (6 tests against the real `GriffLiveEngine`: restart adopts an open BTC ticket with 20 bars and manages it, zero history while `IN_TRADE` holds the position across polls and recovers, failed position reads never flip `IN_TRADE` to `SEARCHING`, the in-cycle candle retry joins the hub's in-flight fetch, 40 bars when flat is still `ACCUMULATING_HISTORY`, 14 bars while `IN_TRADE` defers the ratchet). Every engine test asserts `broker.mutation_calls == 0` and `broker.order_calls == 0`.
+
+Before the fix, the >64 KiB test fails exactly as the 2026-10-02 audit describes: `HubRequestError CLOSED: hub connection closed` on the candle call, then `TimeoutError` on the next account-information call, reader task done. The VM re-run on Python 3.9 with the SDK installed is the remaining confirmation; see [RESTART_CHECKLIST.md](RESTART_CHECKLIST.md) step 1.
+
+## 2026-10-01 hub branch
+
 Recorded 2026-10-01 on this branch after the shutdown fix (idle client sockets are closed so `wait_closed` cannot hang).
 
 A later VM run of the same script on matt-berserker (Python 3.9, MetaAPI SDK installed) was 24/27. The three failures were environment checks, not sync or order safety. They are fixed on this branch: lazy asyncio locks, `SDK_MISSING` forced without importing the real SDK, and off-mode assertions that accept an installed `MetaApiWrapper` without constructing `MetaApi`. Re-run steps are in [RUNBOOK.md](RUNBOOK.md). Do not deploy and do not enable the live hub to re-run them.

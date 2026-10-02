@@ -27,3 +27,24 @@ class LazyLock:
 
     async def __aexit__(self, exc_type, exc, tb) -> None:
         self._ensure().release()
+
+
+class LazySemaphore:
+    """``async with`` semaphore that binds to the running loop on first use."""
+
+    def __init__(self, value: int) -> None:
+        if value < 1:
+            raise ValueError("semaphore value must be at least 1")
+        self.value = value
+        self._sem: asyncio.Semaphore | None = None
+
+    def _ensure(self) -> asyncio.Semaphore:
+        if self._sem is None:
+            self._sem = asyncio.Semaphore(self.value)
+        return self._sem
+
+    async def __aenter__(self) -> None:
+        await self._ensure().acquire()
+
+    async def __aexit__(self, exc_type, exc, tb) -> None:
+        self._ensure().release()
