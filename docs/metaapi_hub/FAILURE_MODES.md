@@ -33,6 +33,16 @@ Observed on matt-berserker 04:43–06:43 EDT: hub-side `TimeoutError`/`TimeoutEx
 
 None of these paths close, cancel, or modify a broker position. The engine's only mutations remain the strategy's own: cancelling the unfilled opposite pending leg once a position exists, and tightening the stop on a new completed bar.
 
+## Added 2026-10-02 (candle single-flight release)
+
+Observed on the live hub PID 2849217 at 19:26 ET. Historical candle attempts 1/4 and 2/4 logged at the 20 s SDK timeout; attempt 3 never logged and `candle_retries` froze at 2. No further candle HTTP line. Engines logged `timed out after 15s ()` and history `0/50`.
+
+| Symptom | Before | Now |
+| --- | --- | --- |
+| Candle SDK call ignores cancellation | `MetaApiBroker._call` uses `asyncio.wait_for`. On Python 3.9 that does not raise until the cancelled SDK task finishes, so the shared candle flight never reached attempt 3. `historical_candles` is one shielded flight and the server does not cancel the handler when the engine's 15 s timeout fires, so every later candle request joined the stuck flight. | Each candle call has a hub budget (`--candle-call-timeout`, default 30 s) that raises `TIMEOUT` without waiting for the SDK task. When the last waiter leaves, the flight is dropped from the slot immediately. The next request starts a new call. A call that finishes normally is still shared. Health: `candle_flights_released`, `abandoned_calls`, `abandoned_calls_pending`. |
+
+Entry, stop, size, and session are unchanged. `entry_guard` and `book_sync` are unchanged.
+
 ## Added 2026-10-02 (US100 / Gold restart adoption)
 
 Observed on matt-berserker ~11:45 ET: `griff_engine_us100` was restarted after the double-book guard deploy while the broker still held BUY `172676142` (US100.cash 8.88 @ 30807.38, SL/TP set). The new process stayed `SEARCHING`.
@@ -71,6 +81,7 @@ Strategy parameters, the 03:15–10:00 window, sizing, the 16:00 hard close, and
 - `duplicate_suppressions` — identical orders that were not sent twice.
 - `read_retries`, `candle_retries` — upstream hiccups the hub absorbed. Rising during degradation is expected; the engines keep their deadlines.
 - `candle_stale_serves` — fetches answered from the last good set. Non-zero means candles were unavailable for a full retry cycle; look at `last_upstream_error`.
+- `candle_flights_released` / `abandoned_calls` — a candle flight was dropped because every caller had already left, or an SDK call was cancelled without waiting for it. The next request starts a new call. `abandoned_calls_pending` is how many of those SDK tasks are still running.
 - `last_upstream_error` — most recent upstream failure, as `method: CODE: message`.
 - `server_oversized_frames` — must stay `0`.
 - `read_concurrency`, `max_message_bytes` — configuration echo.

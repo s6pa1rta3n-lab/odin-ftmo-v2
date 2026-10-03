@@ -95,6 +95,16 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=300.0,
         help="Serve the last good candle set for this many seconds when a fresh fetch fails (default 300s; 0 disables).",
     )
+    parser.add_argument(
+        "--candle-call-timeout",
+        type=float,
+        default=30.0,
+        help=(
+            "Hub-side budget for one SDK candle call (default 30s; 0 disables). Unlike the SDK's own "
+            "--rpc-timeout it does not wait for the cancelled SDK task to finish, so a stuck call cannot "
+            "hold the candle single-flight. Keep it above --rpc-timeout."
+        ),
+    )
     return parser.parse_args(argv)
 
 
@@ -163,10 +173,11 @@ async def _serve(args: argparse.Namespace) -> None:
         read_concurrency=args.read_concurrency,
         candle_attempts=args.candle_attempts,
         candle_stale_ttl=args.candle_stale_ttl,
+        candle_call_timeout=args.candle_call_timeout,
     )
     log.info(
         "Hub resilience: rpc_timeout=%.0fs sync_timeout=%.0fs backoff=%.2fs..%.0fs jitter=%.2f "
-        "read_attempts=%s read_concurrency=%s candle_attempts=%s candle_stale_ttl=%.0fs",
+        "read_attempts=%s read_concurrency=%s candle_attempts=%s candle_stale_ttl=%.0fs candle_call_timeout=%.0fs",
         args.rpc_timeout,
         args.sync_timeout,
         args.backoff_base,
@@ -176,7 +187,14 @@ async def _serve(args: argparse.Namespace) -> None:
         args.read_concurrency,
         args.candle_attempts,
         args.candle_stale_ttl,
+        args.candle_call_timeout,
     )
+    if 0 < args.candle_call_timeout <= args.rpc_timeout:
+        log.warning(
+            "--candle-call-timeout (%.0fs) is not above --rpc-timeout (%.0fs); the hub budget will fire before the SDK's own timeout",
+            args.candle_call_timeout,
+            args.rpc_timeout,
+        )
     server = HubServer(owner, args.socket)
     await server.start()
     stop = asyncio.Event()

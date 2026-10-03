@@ -84,6 +84,7 @@ All have production defaults; the installed unit does not need to change. Pass t
 | `--read-concurrency` | 4 | Concurrent reads on the shared connection. `1` = strict serialization. Mutations are always 1. |
 | `--candle-attempts` | 4 | Attempts inside one candle flight. |
 | `--candle-stale-ttl` | 300 | Serve the last good candle set for this long when a fresh fetch fails. `0` disables. |
+| `--candle-call-timeout` | 30 | Hub budget for one SDK candle call. Unlike `--rpc-timeout` it does not wait for the cancelled SDK task, so a stuck call cannot hold the single-flight. `0` disables. Keep it above `--rpc-timeout`. |
 
 The hub logs the effective values at start on one `Hub resilience:` line.
 

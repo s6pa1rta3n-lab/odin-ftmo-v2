@@ -10,6 +10,12 @@ never retried.
 
 Backoff is exponential with a cap and jitter so three engines that hit the
 same upstream hiccup do not retry in lockstep.
+
+Historical candles are one flight per key. The slot that flight holds is
+released in bounded time even when the SDK task underneath it never finishes:
+each candle call has a hub-side budget (``candle_call_timeout``) that does not
+wait for the cancelled SDK task, and a flight every waiter has left is dropped
+from the slot instead of being joined by the next request.
 """
 
 from __future__ import annotations
@@ -53,6 +59,7 @@ class SyncOwner:
         backoff_jitter: float = 0.25,
         candle_attempts: int = 4,
         candle_stale_ttl: float = 300.0,
+        candle_call_timeout: float = 30.0,
         read_attempts: int = 3,
         read_concurrency: int = 4,
         duplicate_window: float = 3.0,
@@ -73,6 +80,8 @@ class SyncOwner:
             raise HubError("CONFIG", "candle_attempts must be at least 1")
         if read_concurrency < 1:
             raise HubError("CONFIG", "read_concurrency must be at least 1")
+        if candle_call_timeout < 0:
+            raise HubError("CONFIG", "candle_call_timeout must be 0 (off) or positive")
         self.broker = broker
         self.mode = mode
         self.orders_mode = orders_mode
@@ -84,6 +93,7 @@ class SyncOwner:
         self.backoff_jitter = max(0.0, backoff_jitter)
         self.candle_attempts = candle_attempts
         self.candle_stale_ttl = candle_stale_ttl
+        self.candle_call_timeout = candle_call_timeout
         self.read_attempts = read_attempts
         self.read_concurrency = read_concurrency
         self.duplicate_window = duplicate_window
@@ -98,6 +108,8 @@ class SyncOwner:
         self.candle_timeouts = 0
         self.candle_retries = 0
         self.candle_stale_serves = 0
+        self.abandoned_calls = 0
+        self.candle_flights_released = 0
         self.read_retries = 0
         self.single_flight_joins = 0
         self.cache_hits = 0
@@ -108,7 +120,8 @@ class SyncOwner:
         self._rpc_lock = LazyLock()
         self._read_gate = LazySemaphore(read_concurrency)
         self._flight_lock = LazyLock()
-        self._inflight: dict[tuple, asyncio.Task] = {}
+        self._inflight: dict[tuple, _Flight] = {}
+        self._orphans: set[asyncio.Task] = set()
         self._cache: dict[tuple, tuple[float, list]] = {}
         self._last_good: dict[tuple, tuple[float, list]] = {}
         self._recent_mutations: dict[tuple, tuple[float, dict]] = {}
@@ -193,6 +206,10 @@ class SyncOwner:
             "candle_timeouts": self.candle_timeouts,
             "candle_retries": self.candle_retries,
             "candle_stale_serves": self.candle_stale_serves,
+            "candle_call_timeout": self.candle_call_timeout,
+            "abandoned_calls": self.abandoned_calls,
+            "candle_flights_released": self.candle_flights_released,
+            "abandoned_calls_pending": len(self._orphans),
             "read_retries": self.read_retries,
             "read_concurrency": self.read_concurrency,
             "last_upstream_error": self.last_upstream_error,
@@ -268,13 +285,23 @@ class SyncOwner:
             self.reconnects += 1
             log.info("Sync owner reconnected reconnects=%s epoch=%s", self.reconnects, self._epoch)
 
-    async def read(self, method: str, *args: Any, attempts: int | None = None) -> Any:
+    async def read(
+        self,
+        method: str,
+        *args: Any,
+        attempts: int | None = None,
+        call_timeout: float | None = None,
+    ) -> Any:
         """Run a read RPC. Never opens a second slot.
 
         * ``NotConnectedError`` triggers one shared reconnect, then one resend.
         * Other retryable errors (TIMEOUT, TooManyRequests, 504) are resent up
           to ``attempts`` times (default ``read_attempts``) with jittered
           backoff. Reads are idempotent, so this cannot double-fill.
+        * ``call_timeout`` (seconds, ``None``/``0`` = off) is a hub-side budget
+          for one broker call. Unlike ``asyncio.wait_for`` it does not wait for
+          the cancelled SDK task to finish: the call is abandoned, the read
+          gate is released, and ``TIMEOUT`` is raised on time.
         """
 
         total = self.read_attempts if attempts is None else max(1, attempts)
@@ -284,12 +311,12 @@ class SyncOwner:
             try:
                 try:
                     async with self._read_gate:
-                        return await self._invoke(method, *args)
+                        return await self._invoke_bounded(method, args, call_timeout)
                 except NotConnectedError:
                     log.warning("Read %s saw 'not connected to broker'; one shared reconnect", method)
                     await self._recover(epoch)
                     async with self._read_gate:
-                        return await self._invoke(method, *args)
+                        return await self._invoke_bounded(method, args, call_timeout)
             except HubError as exc:
                 self.last_upstream_error = f"{method}: {exc}"
                 if not exc.retryable or isinstance(exc, NotConnectedError) or attempt >= total:
@@ -313,6 +340,15 @@ class SyncOwner:
         Joiners await the shared flight through ``asyncio.shield`` so one
         engine giving up (its ``wait_for`` expired, or its socket closed)
         cannot cancel the fetch the other engines are still waiting on.
+
+        The slot is released in bounded time regardless of the SDK:
+
+        * each broker call inside the flight runs under ``candle_call_timeout``
+          and is abandoned, not awaited, when that budget expires;
+        * when the last waiter leaves (cancelled or timed out) before the
+          flight finishes, the flight is cancelled and dropped from the slot
+          without waiting for it, so the next request starts a new call
+          instead of joining a fetch nobody is waiting for.
         """
 
         if limit is not None:
@@ -330,25 +366,103 @@ class SyncOwner:
             if cached and (self._clock() - cached[0]) <= self.cache_ttl:
                 self.cache_hits += 1
                 return [dict(item) for item in cached[1]]
-            task = self._inflight.get(key)
-            if task is None or task.done():
+            flight = self._inflight.get(key)
+            if flight is None or flight.task.done():
                 # A finished task can linger here when every waiter was
                 # cancelled before it completed. Never hand out its old result.
                 task = asyncio.get_running_loop().create_task(
                     self._load_candles(key, symbol, timeframe, limit)
                 )
                 task.add_done_callback(_consume_task_result)
-                self._inflight[key] = task
+                flight = _Flight(task)
+                self._inflight[key] = flight
             else:
                 self.single_flight_joins += 1
+            flight.waiters += 1
         try:
-            result = await asyncio.shield(task)
+            result = await asyncio.shield(flight.task)
             return [dict(item) for item in result]
         finally:
-            if task.done():
-                async with self._flight_lock:
-                    if self._inflight.get(key) is task:
-                        self._inflight.pop(key, None)
+            # No await here: a second cancellation while leaving must not
+            # skip the bookkeeping that frees the slot.
+            self._leave_flight(key, flight)
+
+    def _leave_flight(self, key: tuple, flight: "_Flight") -> None:
+        flight.waiters -= 1
+        if flight.task.done():
+            if self._inflight.get(key) is flight:
+                self._inflight.pop(key, None)
+            return
+        if flight.waiters > 0:
+            return
+        # Every caller timed out or was cancelled. Release the slot now and
+        # do not wait for the task: on Python 3.9 asyncio.wait_for inside the
+        # SDK path only returns once the cancelled SDK task finishes, which is
+        # the hang seen live (candle_retries frozen at 2, attempt 3 never
+        # logged). The next request must be free to start a new call.
+        if self._inflight.get(key) is flight:
+            self._inflight.pop(key, None)
+        self.candle_flights_released += 1
+        flight.task.cancel()
+        log.warning(
+            "Historical candles %s %s: every waiter left before the flight finished; "
+            "slot released, flight cancelled and not awaited (released=%s)",
+            key[0],
+            key[1],
+            self.candle_flights_released,
+        )
+
+    async def _invoke_bounded(self, method: str, args: tuple, budget: float | None) -> Any:
+        """``_invoke`` with a budget that does not wait for the SDK task to stop.
+
+        ``asyncio.wait_for`` (3.9 and 3.12 alike) returns only after the inner
+        coroutine has processed its cancellation. An SDK task that swallows or
+        delays that never comes back, so the budget never fires. Here the call
+        runs as its own task; at the deadline it is cancelled and left to
+        finish on its own, and the caller gets ``TIMEOUT`` on time.
+        """
+
+        if not budget or budget <= 0:
+            return await self._invoke(method, *args)
+        inner = asyncio.get_running_loop().create_task(self._invoke(method, *args))
+        try:
+            done, _ = await asyncio.wait({inner}, timeout=budget)
+        except asyncio.CancelledError:
+            self._abandon(inner, method, "caller cancelled")
+            raise
+        if inner in done:
+            return inner.result()
+        self._abandon(inner, method, f"exceeded the hub budget of {budget:.0f}s")
+        raise HubError(
+            "TIMEOUT",
+            f"{method} exceeded the hub budget of {budget:.0f}s; the SDK call was abandoned",
+            retryable=True,
+        )
+
+    def _abandon(self, inner: asyncio.Task, method: str, why: str) -> None:
+        """Cancel a broker call and stop tracking it without awaiting it."""
+
+        if inner.done():
+            return
+        self.abandoned_calls += 1
+        self._orphans.add(inner)
+        inner.add_done_callback(self._orphan_finished)
+        inner.cancel()
+        log.warning(
+            "Abandoning %s (%s). Not waiting for the SDK task to finish; abandoned=%s pending=%s",
+            method,
+            why,
+            self.abandoned_calls,
+            len(self._orphans),
+        )
+
+    def _orphan_finished(self, inner: asyncio.Task) -> None:
+        self._orphans.discard(inner)
+        if inner.cancelled():
+            return
+        exc = inner.exception()
+        if exc is not None:
+            log.info("Abandoned SDK call finished later with %s; pending=%s", type(exc).__name__, len(self._orphans))
 
     async def _load_candles(self, key: tuple, symbol: str, timeframe: str, limit: int | None) -> list:
         last: BaseException | None = None
@@ -356,7 +470,14 @@ class SyncOwner:
             try:
                 # Candle retries are owned here so the schedule is one loop,
                 # not read_attempts * candle_attempts.
-                raw = await self.read("get_historical_candles", symbol, timeframe, limit, attempts=1)
+                raw = await self.read(
+                    "get_historical_candles",
+                    symbol,
+                    timeframe,
+                    limit,
+                    attempts=1,
+                    call_timeout=self.candle_call_timeout,
+                )
                 self.candle_fetches += 1
                 normalized = normalize_candles(raw, limit)
                 now = self._clock()
@@ -503,6 +624,16 @@ class SyncOwner:
     async def _invoke(self, method: str, *args: Any) -> Any:
         func = getattr(self.broker, method)
         return await func(*args)
+
+
+class _Flight:
+    """One in-flight candle fetch and the number of callers awaiting it."""
+
+    __slots__ = ("task", "waiters")
+
+    def __init__(self, task: asyncio.Task) -> None:
+        self.task = task
+        self.waiters = 0
 
 
 def _consume_task_result(task: asyncio.Task) -> None:
