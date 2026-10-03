@@ -11,11 +11,12 @@ never retried.
 Backoff is exponential with a cap and jitter so three engines that hit the
 same upstream hiccup do not retry in lockstep.
 
-Historical candles are one flight per key. The slot that flight holds is
-released in bounded time even when the SDK task underneath it never finishes:
-each candle call has a hub-side budget (``candle_call_timeout``) that does not
-wait for the cancelled SDK task, and a flight every waiter has left is dropped
-from the slot instead of being joined by the next request.
+Historical candles are one flight per key. A timed-out or cancelled candle
+call releases that slot even when the SDK task underneath it never finishes:
+the call is abandoned instead of waiting out ``asyncio.wait_for``, and a
+flight every waiter has left is dropped so the next request starts a new call.
+There is no separate candle timeout; the budget is the broker's existing
+``rpc_timeout``.
 """
 
 from __future__ import annotations
@@ -59,7 +60,6 @@ class SyncOwner:
         backoff_jitter: float = 0.25,
         candle_attempts: int = 4,
         candle_stale_ttl: float = 300.0,
-        candle_call_timeout: float = 30.0,
         read_attempts: int = 3,
         read_concurrency: int = 4,
         duplicate_window: float = 3.0,
@@ -80,8 +80,6 @@ class SyncOwner:
             raise HubError("CONFIG", "candle_attempts must be at least 1")
         if read_concurrency < 1:
             raise HubError("CONFIG", "read_concurrency must be at least 1")
-        if candle_call_timeout < 0:
-            raise HubError("CONFIG", "candle_call_timeout must be 0 (off) or positive")
         self.broker = broker
         self.mode = mode
         self.orders_mode = orders_mode
@@ -93,7 +91,6 @@ class SyncOwner:
         self.backoff_jitter = max(0.0, backoff_jitter)
         self.candle_attempts = candle_attempts
         self.candle_stale_ttl = candle_stale_ttl
-        self.candle_call_timeout = candle_call_timeout
         self.read_attempts = read_attempts
         self.read_concurrency = read_concurrency
         self.duplicate_window = duplicate_window
@@ -206,7 +203,6 @@ class SyncOwner:
             "candle_timeouts": self.candle_timeouts,
             "candle_retries": self.candle_retries,
             "candle_stale_serves": self.candle_stale_serves,
-            "candle_call_timeout": self.candle_call_timeout,
             "abandoned_calls": self.abandoned_calls,
             "candle_flights_released": self.candle_flights_released,
             "abandoned_calls_pending": len(self._orphans),
@@ -290,7 +286,7 @@ class SyncOwner:
         method: str,
         *args: Any,
         attempts: int | None = None,
-        call_timeout: float | None = None,
+        release_on_cancel: bool = False,
     ) -> Any:
         """Run a read RPC. Never opens a second slot.
 
@@ -298,10 +294,10 @@ class SyncOwner:
         * Other retryable errors (TIMEOUT, TooManyRequests, 504) are resent up
           to ``attempts`` times (default ``read_attempts``) with jittered
           backoff. Reads are idempotent, so this cannot double-fill.
-        * ``call_timeout`` (seconds, ``None``/``0`` = off) is a hub-side budget
-          for one broker call. Unlike ``asyncio.wait_for`` it does not wait for
-          the cancelled SDK task to finish: the call is abandoned, the read
-          gate is released, and ``TIMEOUT`` is raised on time.
+        * ``release_on_cancel`` is set for historical candles. The broker call
+          then runs as its own task: cancellation, and the broker's existing
+          ``rpc_timeout`` when it has one, abandon that task instead of waiting
+          for it. Other reads are unchanged.
         """
 
         total = self.read_attempts if attempts is None else max(1, attempts)
@@ -311,12 +307,12 @@ class SyncOwner:
             try:
                 try:
                     async with self._read_gate:
-                        return await self._invoke_bounded(method, args, call_timeout)
+                        return await self._invoke_read(method, args, release_on_cancel=release_on_cancel)
                 except NotConnectedError:
                     log.warning("Read %s saw 'not connected to broker'; one shared reconnect", method)
                     await self._recover(epoch)
                     async with self._read_gate:
-                        return await self._invoke_bounded(method, args, call_timeout)
+                        return await self._invoke_read(method, args, release_on_cancel=release_on_cancel)
             except HubError as exc:
                 self.last_upstream_error = f"{method}: {exc}"
                 if not exc.retryable or isinstance(exc, NotConnectedError) or attempt >= total:
@@ -341,14 +337,13 @@ class SyncOwner:
         engine giving up (its ``wait_for`` expired, or its socket closed)
         cannot cancel the fetch the other engines are still waiting on.
 
-        The slot is released in bounded time regardless of the SDK:
+        The slot is released even when the SDK task does not finish:
 
-        * each broker call inside the flight runs under ``candle_call_timeout``
-          and is abandoned, not awaited, when that budget expires;
-        * when the last waiter leaves (cancelled or timed out) before the
-          flight finishes, the flight is cancelled and dropped from the slot
-          without waiting for it, so the next request starts a new call
-          instead of joining a fetch nobody is waiting for.
+        * the broker call is abandoned, not awaited, when its caller is
+          cancelled or when the broker's existing ``rpc_timeout`` expires;
+        * when the last waiter leaves before the flight finishes, the flight
+          is dropped from the slot without waiting for it, so the next request
+          starts a new call instead of joining a fetch nobody is waiting for.
         """
 
         if limit is not None:
@@ -412,18 +407,29 @@ class SyncOwner:
             self.candle_flights_released,
         )
 
-    async def _invoke_bounded(self, method: str, args: tuple, budget: float | None) -> Any:
-        """``_invoke`` with a budget that does not wait for the SDK task to stop.
+    def _rpc_timeout(self) -> float | None:
+        """The broker's existing RPC budget, if it has one. Not a new setting."""
 
-        ``asyncio.wait_for`` (3.9 and 3.12 alike) returns only after the inner
-        coroutine has processed its cancellation. An SDK task that swallows or
-        delays that never comes back, so the budget never fires. Here the call
-        runs as its own task; at the deadline it is cancelled and left to
-        finish on its own, and the caller gets ``TIMEOUT`` on time.
+        raw = getattr(self.broker, "rpc_timeout", None)
+        if isinstance(raw, bool) or not isinstance(raw, (int, float)):
+            return None
+        if raw <= 0:
+            return None
+        return float(raw)
+
+    async def _invoke_read(self, method: str, args: tuple, *, release_on_cancel: bool) -> Any:
+        """Run one broker read.
+
+        Candle reads pass ``release_on_cancel``. The call is its own task, so
+        a cancel or the existing ``rpc_timeout`` returns without waiting for
+        an SDK task that ignores cancellation. ``asyncio.wait_for`` does not:
+        on Python 3.9 it returns only after that task finishes. Every other
+        read awaits the broker directly, as before.
         """
 
-        if not budget or budget <= 0:
+        if not release_on_cancel:
             return await self._invoke(method, *args)
+        budget = self._rpc_timeout()
         inner = asyncio.get_running_loop().create_task(self._invoke(method, *args))
         try:
             done, _ = await asyncio.wait({inner}, timeout=budget)
@@ -432,10 +438,10 @@ class SyncOwner:
             raise
         if inner in done:
             return inner.result()
-        self._abandon(inner, method, f"exceeded the hub budget of {budget:.0f}s")
+        self._abandon(inner, method, f"exceeded the RPC timeout of {budget:.0f}s")
         raise HubError(
             "TIMEOUT",
-            f"{method} exceeded the hub budget of {budget:.0f}s; the SDK call was abandoned",
+            f"{method} exceeded the RPC timeout of {budget:.0f}s; the SDK call was abandoned",
             retryable=True,
         )
 
@@ -476,7 +482,7 @@ class SyncOwner:
                     timeframe,
                     limit,
                     attempts=1,
-                    call_timeout=self.candle_call_timeout,
+                    release_on_cancel=True,
                 )
                 self.candle_fetches += 1
                 normalized = normalize_candles(raw, limit)

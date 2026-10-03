@@ -72,7 +72,7 @@ def test_cancelled_caller_releases_the_slot_even_if_the_sdk_task_never_finishes(
         broker = InMemoryBroker()
         sdk = _StuckSdk(broker)
         broker.get_historical_candles = sdk  # type: ignore[method-assign]
-        owner = SyncOwner(broker, mode="shadow", backoff_base=0.0, sleep=_no_sleep, candle_call_timeout=60.0)
+        owner = SyncOwner(broker, mode="shadow", backoff_base=0.0, sleep=_no_sleep)
 
         # Caller 1 is the engine: CANDLE_FETCH_TIMEOUT_SECONDS expires and its await is cancelled.
         with pytest.raises(asyncio.TimeoutError):
@@ -106,11 +106,12 @@ def test_cancelled_caller_releases_the_slot_even_if_the_sdk_task_never_finishes(
     asyncio.run(_run())
 
 
-def test_candle_call_timeout_frees_the_flight_and_the_read_gate_without_waiting_for_the_sdk() -> None:
-    """(1) + (2) on the hub side: a waiter that never cancels (a server handler) still gets an answer in bounded time."""
+def test_rpc_timeout_abandons_a_stuck_sdk_call_and_frees_the_slot() -> None:
+    """A waiter that never cancels still gets TIMEOUT at the existing RPC budget, and the slot is free."""
 
     async def _run() -> None:
         broker = InMemoryBroker()
+        broker.rpc_timeout = 0.1  # type: ignore[attr-defined]
         sdk = _StuckSdk(broker)
         broker.get_historical_candles = sdk  # type: ignore[method-assign]
         owner = SyncOwner(
@@ -120,7 +121,6 @@ def test_candle_call_timeout_frees_the_flight_and_the_read_gate_without_waiting_
             sleep=_no_sleep,
             candle_attempts=2,
             candle_stale_ttl=0.0,
-            candle_call_timeout=0.1,
             read_concurrency=1,
         )
 
@@ -168,9 +168,9 @@ def test_stale_fallback_still_applies_after_abandoned_calls() -> None:
             cache_ttl=0.0,
             candle_attempts=2,
             candle_stale_ttl=300.0,
-            candle_call_timeout=0.1,
         )
         good = await owner.historical_candles("BTCUSD", "1h", 60)
+        broker.rpc_timeout = 0.1  # type: ignore[attr-defined]
         sdk = _StuckSdk(broker)
         broker.get_historical_candles = sdk  # type: ignore[method-assign]
         served = await asyncio.wait_for(owner.historical_candles("BTCUSD", "1h", 60), timeout=2.0)
@@ -251,19 +251,15 @@ def test_normal_completion_still_shares_one_flight() -> None:
         assert owner.cache_hits == 1
         assert broker.candle_calls == 1
 
-        # Budget 0 opts out of the bounded call; normal fetches are unchanged.
-        plain = SyncOwner(InMemoryBroker(), mode="shadow", candle_call_timeout=0.0)
-        assert len(await plain.historical_candles("BTCUSD", "1h", 60)) >= 15
-        assert plain.abandoned_calls == 0
-
     asyncio.run(_run())
 
 
 def test_engine_timeout_over_the_socket_does_not_wedge_later_candle_requests() -> None:
     """The live path: engine wait_for expires client-side, the server handler is not cancelled.
 
-    The hub budget ends the stuck flight; the engine's next poll gets fresh
-    candles from a new call, and account reads keep working throughout.
+    The existing RPC timeout ends the stuck flight without a separate candle
+    timeout. The engine's next poll gets fresh candles from a new call, and
+    account reads keep working throughout.
     """
 
     async def _run() -> None:
@@ -273,10 +269,10 @@ def test_engine_timeout_over_the_socket_does_not_wedge_later_candle_requests() -
                 "backoff_base": 0.0,
                 "candle_attempts": 2,
                 "candle_stale_ttl": 0.0,
-                "candle_call_timeout": 0.3,
                 "read_concurrency": 1,
             }
         )
+        handle.broker.rpc_timeout = 0.3  # type: ignore[attr-defined]
         sdk = _StuckSdk(handle.broker)
         handle.broker.get_historical_candles = sdk  # type: ignore[method-assign]
         wrapper = HubBackedWrapper(None, "shadow-account", engine_name="btc", socket_path=handle.socket_path, shadow=True)
@@ -294,7 +290,7 @@ def test_engine_timeout_over_the_socket_does_not_wedge_later_candle_requests() -
             info = await asyncio.wait_for(wrapper.get_account_information(), timeout=1.0)
             assert info["equity"] == 100000.0
 
-            # The hub budget (0.3 s x 2 attempts) ends the flight without the SDK task finishing.
+            # The existing RPC timeout (0.3s x 2 attempts) ends the flight. No separate candle timeout.
             await asyncio.sleep(0.8)
             assert handle.owner._inflight == {}
             assert handle.owner.abandoned_calls == 2
@@ -307,7 +303,7 @@ def test_engine_timeout_over_the_socket_does_not_wedge_later_candle_requests() -
             assert sdk.calls == 3
             health = await wrapper.client.request("health", {})
             assert health["abandoned_calls"] == 2
-            assert health["candle_call_timeout"] == 0.3
+            assert "candle_call_timeout" not in health
             assert health["single_flight_joins"] == 0
             assert health["synchronize_calls"] == 1
             assert handle.broker.order_calls == 0
