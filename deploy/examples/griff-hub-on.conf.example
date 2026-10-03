@@ -1,0 +1,40 @@
+# INTENTIONAL CUTOVER ONLY. Engine drop-in for Stage 4.
+#
+# Install one copy per unit, only while executing docs/metaapi_hub/CUTOVER.md
+# Stage 4. Nothing in this repository copies this file into
+# /etc/systemd/system. Suggested paths, after the operator chooses them:
+#
+#   /etc/systemd/system/griff_engine_btc.service.d/hub.conf
+#   /etc/systemd/system/griff_engine_us100.service.d/hub.conf
+#   /etc/systemd/system/griff_engine_gold.service.d/hub.conf
+#
+# Those are the unit names observed on matt-berserker during the 2026-10-01
+# Stage 3 canary. Do not use griff_engine.service or griff_engine_xau.service
+# for this drop-in. monitor_griff.py still lists those older names; stopping
+# the wrong unit leaves a live synchronizer running.
+#
+# Do not put this drop-in on ftmo_london_reversal.service or ftmo_hft_omni.service.
+# They are not wired to the hub. During the canary both were inactive.
+#
+# ODIN_METAAPI_HUB=on is read by the hub-aware engine modules on this branch
+# (build_execution_wrapper). The Stage 3 canary did not git-pull the live tree
+# at /home/solveetcoagula/odin_ftmo. If the unit still executes a pre-hub copy
+# of griff_engine_*.py, this drop-in does nothing and that process keeps
+# synchronizing itself. Run the hub-aware modules from this branch. Strategy
+# code and config files stay as they are; the hub is plumbing.
+#
+# PYTHONPATH must include the durable checkout that contains the metaapi_hub
+# package when that package is not already on the live tree. The path below is
+# the recommended checkout. It is not a directory this documentation commit
+# verified on the VM. Do not point PYTHONPATH at /tmp.
+#
+# Leave WorkingDirectory and the existing ExecStart (including --config) on the
+# unit. Do not replace config_us100.json or config.json.
+#
+# Rollback: delete these drop-ins (Environment and DropInPaths empty, as after
+# the canary), daemon-reload, and start the engines with no ODIN_METAAPI_HUB.
+
+[Service]
+Environment=ODIN_METAAPI_HUB=on
+Environment=ODIN_METAAPI_HUB_SOCKET=/run/odin/metaapi-hub.sock
+Environment=PYTHONPATH=/home/solveetcoagula/odin-metaapi-hub

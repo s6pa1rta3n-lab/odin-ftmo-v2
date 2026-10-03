@@ -19,6 +19,7 @@ import json
 import logging
 import math
 import os
+import random
 import signal
 import sys
 import time
@@ -29,6 +30,8 @@ try:
     from MetaApiWrapper import MetaApiWrapper
 except ImportError:
     MetaApiWrapper = None
+
+from metaapi_hub.factory import build_execution_wrapper, engine_name_for_symbol, hub_mode
 
 try:
     from metaapi_cloud_sdk.clients.timeout_exception import TimeoutException
@@ -42,6 +45,19 @@ DEFAULT_ACCOUNT_ID = "6ccd891f-8728-4e37-ad41-1e695c6008ef"
 DEFAULT_SYMBOL = "US100.cash"
 DEFAULT_CONFIG_PATH = "config_us100.json"
 GRIFF_ORDER_COMMENT = "GRIFF_1H_BREAKOUT"
+
+# Completed 1H bars required before the engine searches for a new setup.
+# EMA-50 and ADX need this much history. Unchanged strategy parameter.
+MIN_CANDLES_FOR_SETUP_SCAN = 50
+# Completed 1H bars required to manage an already-open position. ATR-14 uses
+# the last 14 true ranges (15 bars) and the structural trailing stop uses the
+# last 3 bars, so results are identical to the 50-bar case. This only decides
+# whether trailing-stop evaluation can run while history is still filling.
+MIN_CANDLES_FOR_POSITION_MANAGEMENT = 15
+# In-cycle attempts for the candle fetch. Each attempt is bounded; the hub
+# single-flights the fetch so a retry joins the in-progress request.
+CANDLE_FETCH_ATTEMPTS = 2
+CANDLE_FETCH_TIMEOUT_SECONDS = 15.0
 
 logging.basicConfig(
     level=logging.INFO,
@@ -439,6 +455,11 @@ class GriffLiveEngine:
         self.pending_setup_bar_time: Optional[datetime] = None
         self.last_evaluated_bar_time: Optional[datetime] = None
 
+        # Resilience counters. Consecutive failures reset on the next success.
+        self.candle_fetch_failures: int = 0
+        self.position_sync_failures: int = 0
+        self.last_candle_count: int = 0
+
         self.is_running: bool = False
         self.halted: bool = False
 
@@ -448,12 +469,25 @@ class GriffLiveEngine:
         Returns:
             True if connection and balance validation succeed; False otherwise.
         """
-        if MetaApiWrapper is None:
+        if hub_mode() == "off" and MetaApiWrapper is None:
             logger.error("MetaApiWrapper module not available")
             return False
 
-        logger.info("Initializing MetaApiWrapper for account %s", self.account_id)
-        self.wrapper = MetaApiWrapper(self.token, self.account_id)
+        logger.info(
+            "Initializing execution wrapper for account %s (hub_mode=%s)",
+            self.account_id,
+            hub_mode(),
+        )
+        try:
+            # Default hub_mode is off, which keeps constructing MetaApiWrapper.
+            self.wrapper = build_execution_wrapper(
+                self.token,
+                self.account_id,
+                engine_name=engine_name_for_symbol(self.symbol),
+            )
+        except Exception as err:
+            logger.error("Failed to build execution wrapper: %s", err)
+            return False
 
         try:
             await self.wrapper.connect()
@@ -510,14 +544,16 @@ class GriffLiveEngine:
 
         return info
 
-    async def fetch_positions_safe(self) -> List[Dict[str, Any]]:
+    async def fetch_positions_safe(self) -> Optional[List[Dict[str, Any]]]:
         """Fetch active positions with dual streaming and REST fallback.
 
         Returns:
-            List of position dictionaries.
+            List of position dictionaries, or ``None`` when every lookup
+            failed. ``None`` is deliberately distinct from ``[]``: a failed
+            read must never be interpreted as "the book is flat".
         """
         if not self.wrapper:
-            return []
+            return None
 
         positions: Optional[List[Dict[str, Any]]] = None
         try:
@@ -535,10 +571,19 @@ class GriffLiveEngine:
             except Exception as rest_err:
                 logger.error("Secondary REST position lookup error: %s", rest_err)
 
-        return positions or []
+        if positions is None:
+            return None
+        return list(positions)
 
     async def fetch_completed_1h_candles(self, limit: int = 50) -> List[Dict[str, Any]]:
         """Retrieve historical 1H candles and filter to completed hourly bars.
+
+        Makes up to ``CANDLE_FETCH_ATTEMPTS`` bounded attempts per call with a
+        short jittered pause between them. On the hub path a retry joins the
+        fetch the hub already has in flight, so the second attempt usually
+        returns what the first one ran out of time waiting for. Failure
+        returns ``[]`` and increments ``candle_fetch_failures``; the caller
+        decides what that means for the current state.
 
         Args:
             limit: Maximum number of recent candles to retrieve.
@@ -550,19 +595,49 @@ class GriffLiveEngine:
             return []
 
         mt5_sym = self.wrapper._to_mt5(self.symbol) if hasattr(self.wrapper, "_to_mt5") else self.symbol
-        raw_candles: List[Dict[str, Any]] = []
+        raw_candles: Optional[List[Dict[str, Any]]] = None
+        last_error: Optional[str] = None
 
-        try:
-            raw_candles = await asyncio.wait_for(
-                self.wrapper.account.get_historical_candles(mt5_sym, "1h"),
-                timeout=15.0,
+        for attempt in range(1, CANDLE_FETCH_ATTEMPTS + 1):
+            try:
+                raw_candles = await asyncio.wait_for(
+                    self.wrapper.account.get_historical_candles(mt5_sym, "1h"),
+                    timeout=CANDLE_FETCH_TIMEOUT_SECONDS,
+                )
+                break
+            except (TimeoutException, asyncio.TimeoutError) as err:
+                last_error = f"timed out after {CANDLE_FETCH_TIMEOUT_SECONDS:.0f}s ({err or 'no detail'})"
+            except Exception as err:
+                last_error = f"{type(err).__name__}: {err}"
+            if attempt < CANDLE_FETCH_ATTEMPTS:
+                pause = 1.0 + random.random()
+                logger.warning(
+                    "Historical candle fetch attempt %d/%d failed: %s. Retrying in %.1fs.",
+                    attempt,
+                    CANDLE_FETCH_ATTEMPTS,
+                    last_error,
+                    pause,
+                )
+                await asyncio.sleep(pause)
+
+        if raw_candles is None:
+            self.candle_fetch_failures += 1
+            logger.warning(
+                "Historical candle fetch failed on all %d attempts (%s). Consecutive failures: %d. "
+                "State=%s. The engine keeps polling; no broker action is taken because of this.",
+                CANDLE_FETCH_ATTEMPTS,
+                last_error,
+                self.candle_fetch_failures,
+                self.state,
             )
-        except (TimeoutException, asyncio.TimeoutError) as err:
-            logger.warning("Historical candle fetch timed out: %s", err)
             return []
-        except Exception as err:
-            logger.error("Historical candle fetch error: %s", err)
-            return []
+
+        if self.candle_fetch_failures:
+            logger.info(
+                "Historical candle fetch recovered after %d consecutive failures.",
+                self.candle_fetch_failures,
+            )
+        self.candle_fetch_failures = 0
 
         if not raw_candles:
             return []
@@ -775,9 +850,45 @@ class GriffLiveEngine:
         return True
 
     async def synchronize_active_positions(self) -> None:
-        """Synchronize local state with active broker positions and pending orders."""
+        """Synchronize local state with active broker positions and pending orders.
+
+        This is also the restart path: a fresh process starts in SEARCHING,
+        sees the GRIFF_ position the previous process opened, and adopts its
+        ticket, direction, volume, and current broker stop loss. Nothing is
+        closed, cancelled, or modified to make that adoption happen. The only
+        broker call it can issue is the strategy's own cancel of the unfilled
+        opposite breakout leg (pending orders only, never positions).
+
+        A failed position read keeps the current state. ``None`` from the
+        lookup is not "flat"; treating it as flat is how a phantom
+        "closed on broker" transition would strand an open ticket.
+        """
         positions = await self.fetch_positions_safe()
         mt5_sym = self.wrapper._to_mt5(self.symbol) if hasattr(self.wrapper, "_to_mt5") else self.symbol
+
+        if positions is None:
+            self.position_sync_failures += 1
+            if self.state == "IN_TRADE" and self.active_position:
+                logger.warning(
+                    "Position lookup failed (consecutive: %d). Keeping IN_TRADE for ticket %s "
+                    "(%s %.2f lots, SL %.2f). Not treating the book as flat; no broker action taken.",
+                    self.position_sync_failures,
+                    self.active_position.get("id"),
+                    self.active_position.get("direction"),
+                    float(self.active_position.get("volume", 0.0)),
+                    float(self.active_position.get("sl", 0.0)),
+                )
+            else:
+                logger.warning(
+                    "Position lookup failed (consecutive: %d). State %s unchanged until a read succeeds.",
+                    self.position_sync_failures,
+                    self.state,
+                )
+            return
+
+        if self.position_sync_failures:
+            logger.info("Position lookup recovered after %d consecutive failures.", self.position_sync_failures)
+        self.position_sync_failures = 0
 
         griff_positions = [
             p for p in positions
@@ -796,7 +907,8 @@ class GriffLiveEngine:
             }
             if self.state != "IN_TRADE":
                 logger.info(
-                    "Position Detected: %s %.2f lots on %s at %.2f (SL: %.2f, Ticket: %s)",
+                    "Position Detected: %s %.2f lots on %s at %.2f (SL: %.2f, Ticket: %s). "
+                    "Adopting it as-is; the position is not touched.",
                     direction,
                     self.active_position["volume"],
                     self.symbol,
@@ -808,7 +920,7 @@ class GriffLiveEngine:
                 await self.cancel_pending_breakout_orders()
         else:
             if self.state == "IN_TRADE":
-                logger.info("Active trade closed on broker. Returning state to SEARCHING.")
+                logger.info("Active trade closed on broker (confirmed by a successful position read). Returning state to SEARCHING.")
                 self.active_position = None
                 self.state = "SEARCHING"
 
@@ -865,20 +977,67 @@ class GriffLiveEngine:
         await self.synchronize_active_positions()
 
         candles = await self.fetch_completed_1h_candles(limit=60)
-        if len(candles) < 50:
-            logger.info("Accumulating history: %d/50 required completed 1H candles", len(candles))
+        self.last_candle_count = len(candles)
+
+        # Open-position management comes before the setup-scan history gate.
+        # The position was already re-synchronized above; the only thing
+        # candles add here is the trailing-stop ratchet, which needs 15 bars.
+        # Incomplete history never closes, cancels, or modifies the position.
+        if self.state == "IN_TRADE" and self.active_position:
+            if len(candles) < MIN_CANDLES_FOR_POSITION_MANAGEMENT:
+                logger.warning(
+                    "History incomplete (%d/%d bars). Holding IN_TRADE for ticket %s (%s %.2f lots, SL %.2f); "
+                    "trailing-stop evaluation deferred until %d completed 1H bars are available. "
+                    "Position stays untouched.",
+                    len(candles),
+                    MIN_CANDLES_FOR_SETUP_SCAN,
+                    self.active_position.get("id"),
+                    self.active_position.get("direction"),
+                    float(self.active_position.get("volume", 0.0)),
+                    float(self.active_position.get("sl", 0.0)),
+                    MIN_CANDLES_FOR_POSITION_MANAGEMENT,
+                )
+                return {
+                    "status": "IN_TRADE",
+                    "position": self.active_position,
+                    "atr_14": None,
+                    "history_count": len(candles),
+                }
+            atr_14 = compute_atr_14(candles)
+            latest_bar_time = candles[-1].get("time")
+            if len(candles) < MIN_CANDLES_FOR_SETUP_SCAN:
+                logger.info(
+                    "History %d/%d bars while IN_TRADE: managing ticket %s with ATR_14 %.2f; setup scan resumes at %d bars.",
+                    len(candles),
+                    MIN_CANDLES_FOR_SETUP_SCAN,
+                    self.active_position.get("id"),
+                    atr_14,
+                    MIN_CANDLES_FOR_SETUP_SCAN,
+                )
+            if self.last_evaluated_bar_time != latest_bar_time:
+                await self.ratchet_trailing_stop(candles, atr_14)
+                self.last_evaluated_bar_time = latest_bar_time
+            return {
+                "status": "IN_TRADE",
+                "position": self.active_position,
+                "atr_14": atr_14,
+                "history_count": len(candles),
+            }
+
+        if len(candles) < MIN_CANDLES_FOR_SETUP_SCAN:
+            logger.info(
+                "Accumulating history: %d/%d required completed 1H candles (state=%s, consecutive fetch failures=%d)",
+                len(candles),
+                MIN_CANDLES_FOR_SETUP_SCAN,
+                self.state,
+                self.candle_fetch_failures,
+            )
             return {"status": "ACCUMULATING_HISTORY", "count": len(candles)}
 
         atr_14 = compute_atr_14(candles)
         ema_50 = compute_ema_50(candles)
         latest_completed_bar = candles[-1]
         latest_bar_time = latest_completed_bar.get("time")
-
-        if self.state == "IN_TRADE" and self.active_position:
-            if self.last_evaluated_bar_time != latest_bar_time:
-                await self.ratchet_trailing_stop(candles, atr_14)
-                self.last_evaluated_bar_time = latest_bar_time
-            return {"status": "IN_TRADE", "position": self.active_position, "atr_14": atr_14}
 
         if self.state == "PENDING_PLACED":
             if self.pending_setup_bar_time and latest_bar_time != self.pending_setup_bar_time:
@@ -930,6 +1089,10 @@ class GriffLiveEngine:
                     "pending_buy_order_id": self.pending_buy_order_id,
                     "pending_sell_order_id": self.pending_sell_order_id,
                     "pending_setup_bar_time": self.pending_setup_bar_time.isoformat() if hasattr(self.pending_setup_bar_time, "isoformat") else self.pending_setup_bar_time,
+                    "history_count": self.last_candle_count,
+                    "candle_fetch_failures": self.candle_fetch_failures,
+                    "position_sync_failures": self.position_sync_failures,
+                    "updated_at": datetime.now(timezone.utc).isoformat(),
                 }
                 with open("/home/solveetcoagula/odin_ftmo/live_state.json", "w") as f:
                     json.dump(state_dump, f)
@@ -1001,7 +1164,7 @@ class GriffLiveEngine:
 
         logger.info("Broker Response: %s", json.dumps(res, default=str))
         await asyncio.sleep(2.0)
-        positions = await self.fetch_positions_safe()
+        positions = await self.fetch_positions_safe() or []
         griff_pos = [
             p for p in positions
             if str(p.get("id")) == str(res.get("orderId"))
