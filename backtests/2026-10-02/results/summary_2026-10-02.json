@@ -1,0 +1,351 @@
+{
+  "manifest": {
+    "run_date": "2026-10-02",
+    "generated_utc": "2026-10-03T03:29:16.912579+00:00",
+    "feeds": {
+      "BTC": {
+        "path": "data/raw/btcusd-m1-bid-2024-01-01-2026-09-02.csv",
+        "sha256": "603a86caad6ea9596f230a4d539abbe12e17ae1f201b58e4eeb1f3d6044d1bbe",
+        "rows_after_flat_clean": 1240595,
+        "first_utc": "2024-01-01T21:12:00+00:00",
+        "last_utc": "2026-09-01T23:59:00+00:00",
+        "price_side": "bid",
+        "source": "Dukascopy via dukascopy-node 1.50.0 (repo downloader path: data/downloaders/fetch_all_data.py)"
+      },
+      "US100": {
+        "path": "usatechidxusd-m1-bid-2024-01-01-2026-09-02.csv",
+        "sha256": "5d833b201f3374797bd64ae50e2937af21affc1a52ef33a2119d316d35fdd3af",
+        "rows_after_flat_clean": 902221,
+        "first_utc": "2024-01-01T23:00:00+00:00",
+        "last_utc": "2026-09-01T23:58:00+00:00",
+        "price_side": "bid",
+        "source": "Dukascopy via dukascopy-node 1.50.0 (repo downloader path: data/downloaders/fetch_all_data.py)"
+      },
+      "GOLD": {
+        "path": "data/raw/xauusd-m1-bid-2024-01-01-2026-09-02.csv",
+        "sha256": "4219aeca58ff5326a712fb838dca1b857e201ba98bf03a89de4ca6220a5d9287",
+        "rows_after_flat_clean": 945350,
+        "first_utc": "2024-01-01T23:00:00+00:00",
+        "last_utc": "2026-09-01T23:59:00+00:00",
+        "price_side": "bid",
+        "source": "Dukascopy via dukascopy-node 1.50.0 (repo downloader path: data/downloaders/fetch_all_data.py)"
+      }
+    },
+    "costs": {
+      "BTC": {
+        "symbol": "BTCUSD",
+        "spread": 15.0,
+        "commission_per_lot": 0.0,
+        "contract_size": 1.0,
+        "tick_value": 1.0,
+        "min_lot": 0.01
+      },
+      "US100": {
+        "symbol": "US100.cash",
+        "spread": 1.0,
+        "commission_per_lot": 0.0,
+        "contract_size": 1.0,
+        "tick_value": 1.0,
+        "min_lot": 0.01
+      },
+      "GOLD": {
+        "symbol": "XAUUSD",
+        "spread": 0.15,
+        "commission_per_lot": 3.0,
+        "contract_size": 100.0,
+        "tick_value": 1.0,
+        "min_lot": 0.01
+      }
+    },
+    "stacks": {
+      "A_live": {
+        "BTC": 0.008,
+        "US100": 0.01,
+        "GOLD": 0.005
+      },
+      "B_proposed": {
+        "BTC": 0.0025,
+        "US100": 0.005,
+        "GOLD": 0.0025
+      }
+    },
+    "start_equity": 100000.0,
+    "setup_funnel": {
+      "BTC": {
+        "h1_bars": 20758,
+        "inside_bars_scanned": 2418,
+        "adx_blocked": 1421,
+        "pending_placed": 997,
+        "filled": 507,
+        "expired_unfilled": 490
+      }
+    },
+    "complete_months": [
+      "2024-01",
+      "2024-02",
+      "2024-03",
+      "2024-04",
+      "2024-05",
+      "2024-06",
+      "2024-07",
+      "2024-08",
+      "2024-09",
+      "2024-10",
+      "2024-11",
+      "2024-12",
+      "2025-01",
+      "2025-02",
+      "2025-03",
+      "2025-04",
+      "2025-05",
+      "2025-06",
+      "2025-07",
+      "2025-08",
+      "2025-09",
+      "2025-10",
+      "2025-11",
+      "2025-12",
+      "2026-01",
+      "2026-02",
+      "2026-03",
+      "2026-04",
+      "2026-05",
+      "2026-06",
+      "2026-07",
+      "2026-08"
+    ],
+    "partial_months_excluded": [
+      "2026-09"
+    ]
+  },
+  "stacks": {
+    "A_live": {
+      "risk": {
+        "BTC": 0.008,
+        "US100": 0.01,
+        "GOLD": 0.005
+      },
+      "final_equity": 119102.24442688686,
+      "total_return_pct": 19.10224442688686,
+      "max_drawdown_pct_realized": -36.1276101582287,
+      "worst_day": {
+        "date": "2025-02-07",
+        "pnl": -7585.782757397807,
+        "pct": -5.477013209526542
+      },
+      "best_day": {
+        "date": "2026-08-22",
+        "pct": 37.03364431759541
+      },
+      "days_le_minus5pct": 2,
+      "min_realized_equity": 90460.0889594779,
+      "breached_90k_floor": false,
+      "months": {
+        "n_months": 32,
+        "median_pct": -0.4811098140770973,
+        "mean_pct": 0.9873204072752245,
+        "best_pct": 23.25389803232865,
+        "best_month": "2026-08",
+        "worst_pct": -17.618012889703714,
+        "worst_month": "2024-04",
+        "months_ge_10pct": 5,
+        "months_ge_10pct_list": [
+          "2024-05",
+          "2024-12",
+          "2025-05",
+          "2025-10",
+          "2026-08"
+        ],
+        "months_le_minus10pct": 4,
+        "months_positive": 13
+      },
+      "per_asset": {
+        "BTC": {
+          "n": 507,
+          "win_rate_pct": 32.34714003944773,
+          "expectancy_r": 0.1655707276701434,
+          "sum_r": 83.94435892876271,
+          "best_trade": {
+            "entry_time": "2026-08-19 11:02:00+00:00",
+            "r_net": 45.117990410673386,
+            "pnl": 34412.529
+          },
+          "sum_r_ex_best": 38.826368518089325,
+          "expectancy_r_ex_best": 0.07673195359306191,
+          "pnl_usd_ex_best": 23416.947000000204,
+          "avg_win_r": 2.177741738559911,
+          "avg_loss_r": -0.7965168693733606,
+          "pnl_usd": 57829.476000000206,
+          "profit_factor": 1.2269026208759488,
+          "avg_lots": 1.2200986193293886,
+          "exit_reasons": {
+            "SL": 507
+          }
+        },
+        "US100": {
+          "n": 771,
+          "win_rate_pct": 33.20363164721141,
+          "expectancy_r": -0.06109402914658341,
+          "sum_r": -47.10349647201581,
+          "best_trade": {
+            "entry_time": "2025-04-09 14:59:00+00:00",
+            "r_net": 1.9961135611493113,
+            "pnl": 2397.329730704009
+          },
+          "sum_r_ex_best": -49.09961003316512,
+          "expectancy_r_ex_best": -0.06376572731579885,
+          "pnl_usd_ex_best": -58502.54730381762,
+          "avg_win_r": 1.8485522477483693,
+          "avg_loss_r": -1.0103550910594143,
+          "pnl_usd": -56105.21757311361,
+          "profit_factor": 0.9061499765461638,
+          "avg_lots": 22.769182879377432,
+          "exit_reasons": {
+            "SL": 496,
+            "TP": 229,
+            "HARD_CLOSE_16:00ET": 39,
+            "SL_same_minute_as_fill": 7
+          }
+        },
+        "GOLD": {
+          "n": 631,
+          "win_rate_pct": 36.450079239302696,
+          "expectancy_r": 0.05364321121526135,
+          "sum_r": 33.84886627682991,
+          "best_trade": {
+            "entry_time": "2026-01-30 08:33:00+00:00",
+            "r_net": 1.9967954240033339,
+            "pnl": 1158.9800000000043
+          },
+          "sum_r_ex_best": 31.852070852826575,
+          "expectancy_r_ex_best": 0.050558842623534245,
+          "pnl_usd_ex_best": 16219.006000000338,
+          "avg_win_r": 1.9410473760076945,
+          "avg_loss_r": -1.0289078059973562,
+          "pnl_usd": 17377.986000000343,
+          "profit_factor": 1.0730207100397053,
+          "avg_lots": 1.114500792393027,
+          "exit_reasons": {
+            "SL": 393,
+            "TP": 226,
+            "HARD_CLOSE_16:00ET": 7,
+            "SL_same_minute_as_fill": 5
+          }
+        }
+      },
+      "n_trades": 1909
+    },
+    "B_proposed": {
+      "risk": {
+        "BTC": 0.0025,
+        "US100": 0.005,
+        "GOLD": 0.0025
+      },
+      "final_equity": 102701.2035768778,
+      "total_return_pct": 2.7012035768778007,
+      "max_drawdown_pct_realized": -18.99198884090997,
+      "worst_day": {
+        "date": "2025-02-07",
+        "pnl": -3110.0232261446763,
+        "pct": -2.7690337157536025
+      },
+      "best_day": {
+        "date": "2026-08-22",
+        "pct": 11.49491622784516
+      },
+      "days_le_minus5pct": 0,
+      "min_realized_equity": 93942.56885063063,
+      "breached_90k_floor": false,
+      "months": {
+        "n_months": 32,
+        "median_pct": 0.01583037736035227,
+        "mean_pct": 0.18331241531918446,
+        "best_pct": 10.336092669662092,
+        "best_month": "2025-05",
+        "worst_pct": -9.513582744667094,
+        "worst_month": "2024-04",
+        "months_ge_10pct": 1,
+        "months_ge_10pct_list": [
+          "2025-05"
+        ],
+        "months_le_minus10pct": 0,
+        "months_positive": 16
+      },
+      "per_asset": {
+        "BTC": {
+          "n": 507,
+          "win_rate_pct": 32.34714003944773,
+          "expectancy_r": 0.1655707276701434,
+          "sum_r": 83.94435892876271,
+          "best_trade": {
+            "entry_time": "2026-08-19 11:02:00+00:00",
+            "r_net": 45.117990410673386,
+            "pnl": 10908.1224
+          },
+          "sum_r_ex_best": 38.826368518089325,
+          "expectancy_r_ex_best": 0.07673195359306191,
+          "pnl_usd_ex_best": 8751.318900000057,
+          "avg_win_r": 2.177741738559911,
+          "avg_loss_r": -0.7965168693733606,
+          "pnl_usd": 19659.441300000057,
+          "profit_factor": 1.2759768330208718,
+          "avg_lots": 0.34822485207100595,
+          "exit_reasons": {
+            "SL": 507
+          }
+        },
+        "US100": {
+          "n": 771,
+          "win_rate_pct": 33.20363164721141,
+          "expectancy_r": -0.06109402914658341,
+          "sum_r": -47.10349647201581,
+          "best_trade": {
+            "entry_time": "2025-04-09 14:59:00+00:00",
+            "r_net": 1.9961135611493113,
+            "pnl": 1042.0940799419996
+          },
+          "sum_r_ex_best": -49.09961003316512,
+          "expectancy_r_ex_best": -0.06376572731579885,
+          "pnl_usd_ex_best": -26230.753803064097,
+          "avg_win_r": 1.8485522477483693,
+          "avg_loss_r": -1.0103550910594143,
+          "pnl_usd": -25188.6597231221,
+          "profit_factor": 0.906776857626345,
+          "avg_lots": 10.337302204928664,
+          "exit_reasons": {
+            "SL": 496,
+            "TP": 229,
+            "HARD_CLOSE_16:00ET": 39,
+            "SL_same_minute_as_fill": 7
+          }
+        },
+        "GOLD": {
+          "n": 631,
+          "win_rate_pct": 36.450079239302696,
+          "expectancy_r": 0.05364321121526135,
+          "sum_r": 33.84886627682991,
+          "best_trade": {
+            "entry_time": "2026-01-30 08:33:00+00:00",
+            "r_net": 1.9967954240033339,
+            "pnl": 579.4900000000022
+          },
+          "sum_r_ex_best": 31.852070852826575,
+          "expectancy_r_ex_best": 0.050558842623534245,
+          "pnl_usd_ex_best": 7650.932000000136,
+          "avg_win_r": 1.9410473760076945,
+          "avg_loss_r": -1.0289078059973562,
+          "pnl_usd": 8230.422000000139,
+          "profit_factor": 1.0766593983063664,
+          "avg_lots": 0.5080190174326465,
+          "exit_reasons": {
+            "SL": 393,
+            "TP": 226,
+            "HARD_CLOSE_16:00ET": 7,
+            "SL_same_minute_as_fill": 5
+          }
+        }
+      },
+      "n_trades": 1909
+    }
+  }
+}
