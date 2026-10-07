@@ -1,0 +1,7 @@
+**NO — MUTEX XAG soft primary + US100 NR7 does not open a deployable ~3mo path.** DD illegal, HO≤0, or zero ≤90d windows (mutex did not restore HO windows).
+
+XAG_WINDOW_SURVIVAL|39A HO≤90d=8 → 39C mutex HO≤90d=0 (seq HO 0→0) | windows_survived=N
+WINDOWS_SURVIVED|N
+39A|XAG|gov=True|CONDITIONAL|pace=$847/mo|DD=9.4%|90d=48/838(HO=8)|seq=60/838(HO=0)|legal=True|leave=-6976|xcheck_out=0/1 best=6.435126039242833
+39B|US100|gov=True|REJECT|pace=$1931/mo|DD=1.0%|90d=0/732(HO=0)|seq=0/732(HO=0)|legal=True|leave=10588|xcheck_out=0/0 best=8.20896311077519
+39C|JOINT-MUTEX|gov=True|REJECT|pace=$2554/mo|DD=8.0%|90d=100/838(HO=0)|seq=60/838(HO=0)|legal=True|leave=6131|xcheck_out=0/2 best=8.369220676643142
