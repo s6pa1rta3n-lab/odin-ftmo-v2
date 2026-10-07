@@ -1,0 +1,6 @@
+**NO — US100 NR7 + USA30 Keltner55 does not open a deployable ~3mo path.** DD illegal, HO≤0, or zero ≤90d windows.
+
+34A|US100|gov=True|REJECT|pace=$1931/mo|DD=1.0%|90d=0/732(HO=0)|seq=0/732(HO=0)|legal=True|leave=10588|xcheck_out=0/0 best=8.20896311077519
+34B|USA30|gov=True|REJECT|pace=$-272/mo|DD=9.2%|90d=0/836(HO=0)|seq=0/836(HO=0)|legal=True|leave=-3856|xcheck_out=0/0 best=8.161644290260185
+34C|JOINT|gov=False|REJECT|pace=$972/mo|DD=8.9%|90d=0/836(HO=0)|seq=0/836(HO=0)|legal=True|leave=-2658|xcheck_out=0/0 best=12.5106192327324
+34D|JOINT|gov=True|REJECT|pace=$675/mo|DD=7.4%|90d=0/836(HO=0)|seq=0/836(HO=0)|legal=True|leave=-1517|xcheck_out=0/0 best=12.5106192327324
