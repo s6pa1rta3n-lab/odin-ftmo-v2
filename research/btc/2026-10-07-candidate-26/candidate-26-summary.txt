@@ -1,0 +1,2 @@
+C26 GER40 three-close → primary=REJECT via 26B+soft | 26A=REJECT DD=13.04% HO=$-603/mo 90d=0/858(HO=0) out=0 leave=$-19,002 legal=False | 26B soft=REJECT DD=10.45% HO=$-261/mo 90d=0/858(HO=0) out=0 leave=$-6,354 legal=False | sens@2.60%=REJECT DD=13.56%
+Live C4 untouched. Research only.
