@@ -1,0 +1,9 @@
+**NO — FX majors Donchian+softgov does not open a deployable ~3mo path.** DD illegal, HO≤0, or zero ≤90d windows.
+25A|EURUSD|gov=False|REJECT|pace=$447/mo|DD=12.6%|90d=0/848(HO=0)|seq=0/848(HO=0)|legal=False
+25A|EURUSD|gov=True|REJECT|pace=$57/mo|DD=10.8%|90d=0/848(HO=0)|seq=0/848(HO=0)|legal=False
+25B|GBPUSD|gov=False|REJECT|pace=$-764/mo|DD=32.5%|90d=0/847(HO=0)|seq=0/847(HO=0)|legal=False
+25B|GBPUSD|gov=True|REJECT|pace=$-267/mo|DD=16.3%|90d=0/847(HO=0)|seq=0/847(HO=0)|legal=False
+25C|USDJPY|gov=False|REJECT|pace=$-855/mo|DD=21.4%|90d=0/845(HO=0)|seq=0/827(HO=0)|legal=False
+25C|USDJPY|gov=True|REJECT|pace=$-263/mo|DD=11.8%|90d=0/845(HO=0)|seq=0/827(HO=0)|legal=False
+25D|JOINT|gov=False|REJECT|pace=$-260/mo|DD=5.9%|90d=0/848(HO=0)|seq=0/848(HO=0)|legal=True
+25D|JOINT|gov=True|REJECT|pace=$-223/mo|DD=5.6%|90d=0/848(HO=0)|seq=0/848(HO=0)|legal=True
