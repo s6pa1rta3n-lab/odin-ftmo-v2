@@ -1,0 +1,7 @@
+**NO — BRENT/USA500 Donchian+softgov does not open a deployable ~3mo path.** DD illegal, HO≤0, or zero ≤90d windows.
+23A|BRENT|gov=False|REJECT|pace=$871/mo|DD=18.0%|90d=0/777(HO=0)|seq=0/777(HO=0)|legal=False
+23A|BRENT|gov=True|REJECT|pace=$273/mo|DD=11.9%|90d=0/777(HO=0)|seq=0/777(HO=0)|legal=False
+23B|USA500|gov=False|REJECT|pace=$-937/mo|DD=19.9%|90d=0/846(HO=0)|seq=0/846(HO=0)|legal=False
+23B|USA500|gov=True|REJECT|pace=$-282/mo|DD=12.4%|90d=0/846(HO=0)|seq=0/846(HO=0)|legal=False
+23C|JOINT|gov=False|REJECT|pace=$122/mo|DD=13.8%|90d=0/846(HO=0)|seq=0/846(HO=0)|legal=False
+23C|JOINT|gov=True|REJECT|pace=$40/mo|DD=10.1%|90d=0/846(HO=0)|seq=0/846(HO=0)|legal=False
