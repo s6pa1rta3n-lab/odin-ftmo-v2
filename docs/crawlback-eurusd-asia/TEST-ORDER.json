@@ -1,0 +1,31 @@
+{
+  "place": {
+    "stringCode": "TRADE_RETCODE_DONE",
+    "numericCode": 10009,
+    "message": "Request completed",
+    "orderId": "173856690",
+    "positionId": "173856690",
+    "tradeExecutionTime": "2026-10-07T20:45:53.998Z",
+    "tradeStartTime": "2026-10-07T17:45:53.354Z"
+  },
+  "closed": [
+    {
+      "id": "173856690",
+      "code": "TRADE_RETCODE_DONE",
+      "resp": {
+        "stringCode": "TRADE_RETCODE_DONE",
+        "numericCode": 10009,
+        "message": "Request completed",
+        "orderId": "173856690",
+        "positionId": "173856690",
+        "tradeExecutionTime": "2026-10-07T20:45:59.210Z",
+        "tradeStartTime": "2026-10-07T17:45:58.562Z"
+      }
+    }
+  ],
+  "after": {
+    "equity": 91614.86,
+    "balance": 91614.86,
+    "pos": 0
+  }
+}
