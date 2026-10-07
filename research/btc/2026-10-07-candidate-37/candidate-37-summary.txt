@@ -1,0 +1,8 @@
+**NO — XAG soft primary + US100 0.25% fixed satellite does not open a deployable ~3mo path.** HO≤90d windows still 0 (did not survive satellite), DD illegal, or no ≤90d path.
+
+XAG_WINDOW_SURVIVAL|37A HO≤90d=8 → 37C joint HO≤90d=0 (seq HO 0→0) | windows_survived=N
+LEAVE_VS_37A|37A leave-out $-6,976 → 37C leave-out $-6,569 (delta $407)
+WINDOWS_SURVIVED|N
+37A|XAG|gov=True|CONDITIONAL|pace=$847/mo|DD=9.4%|90d=48/838(HO=8)|seq=60/838(HO=0)|legal=True|leave=-6976|xcheck_out=0/1 best=6.435126039242833
+37B|US100|gov=False|REJECT|pace=$385/mo|DD=0.3%|90d=0/732(HO=0)|seq=0/732(HO=0)|legal=True|leave=2142|xcheck_out=0/0 best=2.0096146424077865
+37C|JOINT|gov=True|REJECT|pace=$1186/mo|DD=7.7%|90d=100/838(HO=0)|seq=60/838(HO=0)|legal=True|leave=-6569|xcheck_out=0/2 best=7.276223404167981
