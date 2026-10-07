@@ -1,0 +1,18 @@
+[Unit]
+Description=FTMO EURUSD Asian crawl-back (CRAWLBACK_EURUSD_ASIA) — armed only when CRAWL_ARMED=1
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=solveetcoagula
+WorkingDirectory=/home/solveetcoagula/ftmo-crawlback
+Environment=CRAWL_ARMED=0
+Environment=CRAWL_KILL=0
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/usr/bin/python3 /home/solveetcoagula/ftmo-crawlback/crawlback_eurusd_asia.py
+Restart=on-failure
+RestartSec=20
+
+[Install]
+WantedBy=multi-user.target

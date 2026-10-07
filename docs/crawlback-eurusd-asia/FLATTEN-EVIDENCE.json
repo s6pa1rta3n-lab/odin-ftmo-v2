@@ -1,0 +1,325 @@
+{
+  "at": "2026-10-07T13:43:04.134228-04:00",
+  "account": "a60dfd98-8a34-4c1b-9f2c-b40cdcc2c3bf",
+  "before": {
+    "equity": 91644.92,
+    "balance": 92190.21,
+    "positions": 34,
+    "orders": 0
+  },
+  "after": {
+    "equity": 91614.96,
+    "balance": 91614.96,
+    "positions": 0,
+    "orders": 0
+  },
+  "closes": [
+    {
+      "id": "173476529",
+      "ok": true,
+      "stringCode": "ERR_TRADE_POSITION_NOT_FOUND",
+      "symbol": "BTCUSD",
+      "volume": 0.01,
+      "pnl": -23.89,
+      "comment": "CATALOGUE_BTC_15M"
+    },
+    {
+      "id": "173479674",
+      "ok": true,
+      "stringCode": "ERR_TRADE_POSITION_NOT_FOUND",
+      "symbol": "BTCUSD",
+      "volume": 0.01,
+      "pnl": -24.49,
+      "comment": "CATALOGUE_BTC_15M"
+    },
+    {
+      "id": "173481813",
+      "ok": true,
+      "stringCode": "TRADE_RETCODE_DONE",
+      "symbol": "BTCUSD",
+      "volume": 0.01,
+      "pnl": -24.37,
+      "comment": "CATALOGUE_BTC_15M"
+    },
+    {
+      "id": "173493293",
+      "ok": true,
+      "stringCode": "TRADE_RETCODE_CLOSE_ORDER_EXIST",
+      "symbol": "BTCUSD",
+      "volume": 0.01,
+      "pnl": -23.39,
+      "comment": "CATALOGUE_BTC_15M"
+    },
+    {
+      "id": "173498878",
+      "ok": true,
+      "stringCode": "TRADE_RETCODE_CLOSE_ORDER_EXIST",
+      "symbol": "BTCUSD",
+      "volume": 0.01,
+      "pnl": -23.43,
+      "comment": "CATALOGUE_BTC_15M"
+    },
+    {
+      "id": "173502658",
+      "ok": true,
+      "stringCode": "TRADE_RETCODE_DONE",
+      "symbol": "BTCUSD",
+      "volume": 0.01,
+      "pnl": -24.54,
+      "comment": "CATALOGUE_BTC_15M"
+    },
+    {
+      "id": "173505020",
+      "ok": true,
+      "stringCode": "TRADE_RETCODE_DONE",
+      "symbol": "BTCUSD",
+      "volume": 0.01,
+      "pnl": -24.43,
+      "comment": "CATALOGUE_BTC_15M"
+    },
+    {
+      "id": "173506882",
+      "ok": true,
+      "stringCode": "TRADE_RETCODE_DONE",
+      "symbol": "BTCUSD",
+      "volume": 0.01,
+      "pnl": -24.08,
+      "comment": "CATALOGUE_BTC_15M"
+    },
+    {
+      "id": "173507236",
+      "ok": true,
+      "stringCode": "TRADE_RETCODE_DONE",
+      "symbol": "BTCUSD",
+      "volume": 0.01,
+      "pnl": -24.44,
+      "comment": "CATALOGUE_BTC_15M"
+    },
+    {
+      "id": "173511351",
+      "ok": true,
+      "stringCode": "TRADE_RETCODE_DONE",
+      "symbol": "BTCUSD",
+      "volume": 0.01,
+      "pnl": -23.12,
+      "comment": "CATALOGUE_BTC_15M"
+    },
+    {
+      "id": "173514043",
+      "ok": true,
+      "stringCode": "TRADE_RETCODE_DONE",
+      "symbol": "BTCUSD",
+      "volume": 0.01,
+      "pnl": -23.63,
+      "comment": "CATALOGUE_BTC_15M"
+    },
+    {
+      "id": "173516689",
+      "ok": true,
+      "stringCode": "TRADE_RETCODE_DONE",
+      "symbol": "BTCUSD",
+      "volume": 0.01,
+      "pnl": -23.34,
+      "comment": "CATALOGUE_BTC_15M"
+    },
+    {
+      "id": "173519966",
+      "ok": true,
+      "stringCode": "ERR_TRADE_POSITION_NOT_FOUND",
+      "symbol": "BTCUSD",
+      "volume": 0.01,
+      "pnl": -23.73,
+      "comment": "CATALOGUE_BTC_15M"
+    },
+    {
+      "id": "173525417",
+      "ok": true,
+      "stringCode": "ERR_TRADE_POSITION_NOT_FOUND",
+      "symbol": "BTCUSD",
+      "volume": 0.01,
+      "pnl": -22.47,
+      "comment": "CATALOGUE_BTC_15M"
+    },
+    {
+      "id": "173530501",
+      "ok": true,
+      "stringCode": "TRADE_RETCODE_CLOSE_ORDER_EXIST",
+      "symbol": "BTCUSD",
+      "volume": 0.01,
+      "pnl": -23.69,
+      "comment": "CATALOGUE_BTC_15M"
+    },
+    {
+      "id": "173535234",
+      "ok": true,
+      "stringCode": "TRADE_RETCODE_DONE",
+      "symbol": "BTCUSD",
+      "volume": 0.01,
+      "pnl": -20.95,
+      "comment": "CATALOGUE_BTC_15M"
+    },
+    {
+      "id": "173540736",
+      "ok": true,
+      "stringCode": "ERR_TRADE_POSITION_NOT_FOUND",
+      "symbol": "BTCUSD",
+      "volume": 0.01,
+      "pnl": -11.95,
+      "comment": "CATALOGUE_BTC_15M"
+    },
+    {
+      "id": "173557783",
+      "ok": true,
+      "stringCode": "ERR_TRADE_POSITION_NOT_FOUND",
+      "symbol": "BTCUSD",
+      "volume": 0.01,
+      "pnl": -8.11,
+      "comment": "CATALOGUE_BTC_15M"
+    },
+    {
+      "id": "173561517",
+      "ok": true,
+      "stringCode": "TRADE_RETCODE_DONE",
+      "symbol": "BTCUSD",
+      "volume": 0.01,
+      "pnl": -9.79,
+      "comment": "CATALOGUE_BTC_15M"
+    },
+    {
+      "id": "173564815",
+      "ok": true,
+      "stringCode": "ERR_TRADE_POSITION_NOT_FOUND",
+      "symbol": "BTCUSD",
+      "volume": 0.01,
+      "pnl": -9.72,
+      "comment": "CATALOGUE_BTC_15M"
+    },
+    {
+      "id": "173569130",
+      "ok": true,
+      "stringCode": "TRADE_RETCODE_DONE",
+      "symbol": "BTCUSD",
+      "volume": 0.01,
+      "pnl": -9.33,
+      "comment": "CATALOGUE_BTC_15M"
+    },
+    {
+      "id": "173573941",
+      "ok": true,
+      "stringCode": "ERR_TRADE_POSITION_NOT_FOUND",
+      "symbol": "BTCUSD",
+      "volume": 0.01,
+      "pnl": -10.27,
+      "comment": "CATALOGUE_BTC_15M"
+    },
+    {
+      "id": "173580167",
+      "ok": true,
+      "stringCode": "ERR_TRADE_POSITION_NOT_FOUND",
+      "symbol": "BTCUSD",
+      "volume": 0.01,
+      "pnl": -11.79,
+      "comment": "CATALOGUE_BTC_15M"
+    },
+    {
+      "id": "173588032",
+      "ok": true,
+      "stringCode": "ERR_TRADE_POSITION_NOT_FOUND",
+      "symbol": "BTCUSD",
+      "volume": 0.01,
+      "pnl": -10.44,
+      "comment": "CATALOGUE_BTC_15M"
+    },
+    {
+      "id": "173593931",
+      "ok": true,
+      "stringCode": "ERR_TRADE_POSITION_NOT_FOUND",
+      "symbol": "BTCUSD",
+      "volume": 0.01,
+      "pnl": -10.43,
+      "comment": "CATALOGUE_BTC_15M"
+    },
+    {
+      "id": "173604286",
+      "ok": true,
+      "stringCode": "ERR_TRADE_POSITION_NOT_FOUND",
+      "symbol": "BTCUSD",
+      "volume": 0.01,
+      "pnl": -10.7,
+      "comment": "CATALOGUE_BTC_15M"
+    },
+    {
+      "id": "173619480",
+      "ok": true,
+      "stringCode": "ERR_TRADE_POSITION_NOT_FOUND",
+      "symbol": "BTCUSD",
+      "volume": 0.01,
+      "pnl": -9.77,
+      "comment": "CATALOGUE_BTC_15M"
+    },
+    {
+      "id": "173632481",
+      "ok": true,
+      "stringCode": "ERR_TRADE_POSITION_NOT_FOUND",
+      "symbol": "BTCUSD",
+      "volume": 0.01,
+      "pnl": -8.67,
+      "comment": "CATALOGUE_BTC_15M"
+    },
+    {
+      "id": "173640354",
+      "ok": true,
+      "stringCode": "TRADE_RETCODE_DONE",
+      "symbol": "BTCUSD",
+      "volume": 0.01,
+      "pnl": -8.09,
+      "comment": "CATALOGUE_BTC_15M"
+    },
+    {
+      "id": "173651194",
+      "ok": true,
+      "stringCode": "TRADE_RETCODE_DONE",
+      "symbol": "BTCUSD",
+      "volume": 0.01,
+      "pnl": -6.78,
+      "comment": "CATALOGUE_BTC_15M"
+    },
+    {
+      "id": "173661365",
+      "ok": true,
+      "stringCode": "TRADE_RETCODE_DONE",
+      "symbol": "BTCUSD",
+      "volume": 0.01,
+      "pnl": -6.36,
+      "comment": "CATALOGUE_BTC_15M"
+    },
+    {
+      "id": "173669970",
+      "ok": true,
+      "stringCode": "TRADE_RETCODE_DONE",
+      "symbol": "BTCUSD",
+      "volume": 0.01,
+      "pnl": -7.17,
+      "comment": "CATALOGUE_BTC_15M"
+    },
+    {
+      "id": "173691406",
+      "ok": true,
+      "stringCode": "TRADE_RETCODE_DONE",
+      "symbol": "BTCUSD",
+      "volume": 0.01,
+      "pnl": -5.12,
+      "comment": "CATALOGUE_BTC_15M"
+    },
+    {
+      "id": "173701662",
+      "ok": true,
+      "stringCode": "TRADE_RETCODE_CLOSE_ORDER_EXIST",
+      "symbol": "BTCUSD",
+      "volume": 0.01,
+      "pnl": -5.8,
+      "comment": "CATALOGUE_BTC_15M"
+    }
+  ],
+  "cancels": []
+}
