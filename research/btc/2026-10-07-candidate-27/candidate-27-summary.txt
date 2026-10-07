@@ -1,0 +1,2 @@
+C27 XAG Wilder SAR → primary=REJECT via 27A@2.50% | 27A=REJECT DD=21.08% HO=$2,052/mo 90d=21/863(HO=0) out=0 leave=$2,899 legal=False | 27B soft=REJECT DD=12.80% HO=$757/mo 90d=0/863(HO=0) out=0 leave=$658 legal=False | sens@2.60%=REJECT DD=21.93%
+Live C4 untouched. Research only.
