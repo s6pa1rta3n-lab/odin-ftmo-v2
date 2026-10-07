@@ -1,0 +1,7 @@
+**CONDITIONAL — XAG soft + JPN fixed satellite legal DD + windows, not ACCEPT** via 43D (43D joint XAG soft + JPN 0.25%): max DD 9.2%, ≤90d HO-era 8 (windows_survived=Y vs C42 wipe-risk), HO ~$938/mo, leave-out still FAIL ($-6,937 vs 43A $-6,976). 43C leave worse ($-9,019); 43D leave ≈43A ($-6,937). No deploy.
+
+XAG_WINDOW_SURVIVAL|43A HO≤90d=8 leave=-6976 → 43C HO≤90d=8 DD=9.1% leave=-9019 | 43D HO≤90d=8 DD=9.2% leave=-6937 | windows_survived=Y
+43A|XAG|gov=True|CONDITIONAL|pace=$847/mo|DD=9.4%|90d=48/838(HO=8)|seq=60/838(HO=0)|legal=True|leave=-6976|xcheck_out=0/1 best=6.435126039242833
+43B|JPN225|gov=False|REJECT|pace=$119/mo|DD=3.0%|90d=0/845(HO=0)|seq=0/845(HO=0)|legal=True|leave=-511|xcheck_out=0/0 best=1.9771132286865
+43C|JOINT|gov=True|CONDITIONAL|pace=$907/mo|DD=9.1%|90d=48/857(HO=8)|seq=60/857(HO=0)|legal=True|leave=-9019|xcheck_out=0/2 best=6.91615863532522
+43D|JOINT|gov=True|CONDITIONAL|pace=$938/mo|DD=9.2%|90d=48/857(HO=8)|seq=60/857(HO=0)|legal=True|leave=-6937|xcheck_out=0/2 best=6.69592698242496
