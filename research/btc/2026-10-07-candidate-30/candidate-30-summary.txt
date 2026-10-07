@@ -1,0 +1,3 @@
+**NO — WTI Donchian+softgov does not open a deployable ~3mo path.** DD illegal, HO≤0, or zero ≤90d windows.
+30A|WTI|gov=False|REJECT|pace=$623/mo|DD=10.2%|90d=0/824(HO=0)|seq=0/824(HO=0)|legal=False|leave=-5014
+30B|WTI|gov=True|REJECT|pace=$30/mo|DD=8.8%|90d=0/824(HO=0)|seq=0/824(HO=0)|legal=True|leave=-2989
