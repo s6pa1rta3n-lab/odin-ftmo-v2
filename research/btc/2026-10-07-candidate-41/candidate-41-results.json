@@ -1,0 +1,390 @@
+{
+  "candidate": 41,
+  "measured": "2026-10-07 12:50 ET",
+  "lead": "**NO \u2014 US100 NR7 + BTC C15 soft joint (no XAG) does not open a deployable ~3mo path.** DD illegal, HO\u22640, or zero \u226490d windows.",
+  "primary": "41D",
+  "decision": "REJECT",
+  "window_creation": "41A HO\u226490d=0 | 41B HO\u226490d=0 \u2192 41D joint HO\u226490d=0 (seq HO 0+0\u21920)",
+  "assumptions": {
+    "us100_spread": 1.0,
+    "us100_risks": [
+      0.01,
+      0.005,
+      0.0025
+    ],
+    "btc_spread": 15.0,
+    "btc_risks": [
+      0.0075,
+      0.004,
+      0.002
+    ],
+    "xag": "excluded",
+    "gold": "not packaged",
+    "note": "C15 BTC full 0.75% soft ladder + Explorer US100 NR7 1% soft; no XAG"
+  },
+  "books": [
+    {
+      "label": "41A US100 NR7 @1% soft",
+      "book": "41A",
+      "symbol": "US100",
+      "use_gov": true,
+      "full_risk": 0.01,
+      "mid_risk": 0.005,
+      "floor_risk": 0.0025,
+      "n_trades": 21,
+      "wins": 20,
+      "wr": 0.9523809523809523,
+      "longs": 18,
+      "shorts": 3,
+      "reasons": {
+        "TP": 20,
+        "SL": 1
+      },
+      "gov_counts": {
+        "full": 21
+      },
+      "by_sym": {
+        "US100": 21
+      },
+      "ho_net": 18903.226779999874,
+      "ho_pace": 1930.9202120241482,
+      "fit_net": 27735.94474000014,
+      "leave_drop": [
+        "2026-04",
+        "2026-06"
+      ],
+      "leave_net": 10588.275419999982,
+      "leave_ok": true,
+      "ext_net": 0.0,
+      "ext_status": "UNAVAILABLE (US100 feed ends 2026-09-01; no dukas-ext)",
+      "ext_available": false,
+      "max_dd": 0.010055189436447844,
+      "worst_day": "2025-02-21",
+      "worst_pct": -0.010055189436447802,
+      "n_fail_days": 0,
+      "legal": true,
+      "n60": 0,
+      "w60": 762,
+      "n90": 0,
+      "w90": 732,
+      "p90": [],
+      "n90_ho": 0,
+      "nseq": 0,
+      "wseq": 732,
+      "pseq": [],
+      "nseq_ho": 0,
+      "has_90": false,
+      "has_90_ho": false,
+      "decision": "REJECT",
+      "final_equity": 146639.17151999997,
+      "peak_equity": 146639.17151999997,
+      "explorer_xcheck": {
+        "countable": 0,
+        "outside_countable": 0,
+        "outside_windows": [],
+        "best_outside_pct": 8.20896311077519,
+        "best_outside_months": [
+          "2026-04",
+          "2026-05",
+          "2026-06"
+        ],
+        "full_sample_dd": -0.010055189436447844,
+        "final_equity": 146639.17151999997
+      },
+      "meta": {
+        "funnel": {
+          "gov_full": 21,
+          "taken": 21,
+          "taken_US100": 21
+        },
+        "final_equity": 146639.17151999997,
+        "peak_equity": 146639.17151999997,
+        "killed_days": 0,
+        "chassis": "us100-nr7-1.00+softgov",
+        "taken": 21,
+        "use_gov": true,
+        "symbol": "US100",
+        "n_signals_in": 21,
+        "allow_simultaneous": false
+      }
+    },
+    {
+      "label": "41B BTC C15 @0.75% soft",
+      "book": "41B",
+      "symbol": "BTC",
+      "use_gov": true,
+      "full_risk": 0.0075,
+      "mid_risk": 0.004,
+      "floor_risk": 0.002,
+      "n_trades": 114,
+      "wins": 44,
+      "wr": 0.38596491228070173,
+      "longs": 56,
+      "shorts": 58,
+      "reasons": {
+        "stop": 67,
+        "target": 43,
+        "gap-stop": 3,
+        "gap-target": 1
+      },
+      "gov_counts": {
+        "full": 103,
+        "mid": 11
+      },
+      "by_sym": {
+        "BTC": 114
+      },
+      "ho_net": 12264.36077899998,
+      "ho_pace": 1252.7756446736894,
+      "fit_net": -2030.6283899999682,
+      "leave_drop": [
+        "2026-06",
+        "2026-08"
+      ],
+      "leave_net": 2916.8049609999684,
+      "leave_ok": true,
+      "ext_net": -1775.129288000001,
+      "ext_status": "measured",
+      "ext_available": true,
+      "max_dd": 0.0675610628374624,
+      "worst_day": "2026-09-28",
+      "worst_pct": -0.015350368619995176,
+      "n_fail_days": 0,
+      "legal": true,
+      "n60": 0,
+      "w60": 909,
+      "n90": 0,
+      "w90": 879,
+      "p90": [],
+      "n90_ho": 0,
+      "nseq": 0,
+      "wseq": 879,
+      "pseq": [],
+      "nseq_ho": 0,
+      "has_90": false,
+      "has_90_ho": false,
+      "decision": "REJECT",
+      "final_equity": 108458.603101,
+      "peak_equity": 110233.73238900001,
+      "explorer_xcheck": {
+        "countable": 0,
+        "outside_countable": 0,
+        "outside_windows": [],
+        "best_outside_pct": 6.816463414954943,
+        "best_outside_months": [
+          "2024-06",
+          "2024-07",
+          "2024-08"
+        ],
+        "full_sample_dd": -0.0675610628374624,
+        "final_equity": 108458.603101
+      },
+      "meta": {
+        "funnel": {
+          "gov_full": 103,
+          "taken": 114,
+          "taken_BTC": 114,
+          "gov_mid": 11
+        },
+        "final_equity": 108458.603101,
+        "peak_equity": 110233.73238900001,
+        "killed_days": 0,
+        "chassis": "btc-h4-bb-squeeze-0.75+softgov",
+        "taken": 114,
+        "use_gov": true,
+        "symbol": "BTC",
+        "n_signals_in": 114,
+        "allow_simultaneous": false
+      }
+    },
+    {
+      "label": "41C joint ungoverened",
+      "book": "41C",
+      "symbol": "JOINT",
+      "use_gov": false,
+      "full_risk": 0.0175,
+      "mid_risk": 0.009000000000000001,
+      "floor_risk": 0.0045000000000000005,
+      "n_trades": 135,
+      "wins": 64,
+      "wr": 0.4740740740740741,
+      "longs": 74,
+      "shorts": 61,
+      "reasons": {
+        "stop": 67,
+        "TP": 20,
+        "target": 43,
+        "SL": 1,
+        "gap-stop": 3,
+        "gap-target": 1
+      },
+      "gov_counts": {
+        "n/a": 135
+      },
+      "by_sym": {
+        "BTC": 114,
+        "US100": 21
+      },
+      "ho_net": 37399.621663999824,
+      "ho_pace": 3820.2835015172973,
+      "fit_net": 28360.84085500016,
+      "leave_drop": [
+        "2026-06",
+        "2026-03"
+      ],
+      "leave_net": 19250.493185999865,
+      "leave_ok": true,
+      "ext_net": -2670.2025740000017,
+      "ext_status": "measured",
+      "ext_available": true,
+      "max_dd": 0.0522399756619007,
+      "worst_day": "2026-09-28",
+      "worst_pct": -0.0153482857173213,
+      "n_fail_days": 0,
+      "legal": true,
+      "n60": 0,
+      "w60": 909,
+      "n90": 0,
+      "w90": 879,
+      "p90": [],
+      "n90_ho": 0,
+      "nseq": 0,
+      "wseq": 879,
+      "pseq": [],
+      "nseq_ho": 0,
+      "has_90": false,
+      "has_90_ho": false,
+      "decision": "REJECT",
+      "final_equity": 163090.2599449999,
+      "peak_equity": 165760.46251899994,
+      "explorer_xcheck": {
+        "countable": 0,
+        "outside_countable": 0,
+        "outside_windows": [],
+        "best_outside_pct": 12.63071552085151,
+        "best_outside_months": [
+          "2024-06",
+          "2024-07",
+          "2024-08"
+        ],
+        "full_sample_dd": -0.0522399756619007,
+        "final_equity": 163090.2599449999
+      },
+      "meta": {
+        "funnel": {
+          "taken": 135,
+          "taken_BTC": 114,
+          "taken_US100": 21
+        },
+        "final_equity": 163090.2599449999,
+        "peak_equity": 165760.46251899994,
+        "killed_days": 0,
+        "chassis": "us100nr7+btc-joint-ungov",
+        "taken": 135,
+        "use_gov": false,
+        "symbol": "JOINT",
+        "n_signals_in": 135,
+        "allow_simultaneous": true
+      }
+    },
+    {
+      "label": "41D joint + soft gov (verdict)",
+      "book": "41D",
+      "symbol": "JOINT",
+      "use_gov": true,
+      "full_risk": 0.0175,
+      "mid_risk": 0.009000000000000001,
+      "floor_risk": 0.0045000000000000005,
+      "n_trades": 135,
+      "wins": 64,
+      "wr": 0.4740740740740741,
+      "longs": 74,
+      "shorts": 61,
+      "reasons": {
+        "stop": 67,
+        "TP": 20,
+        "target": 43,
+        "SL": 1,
+        "gap-stop": 3,
+        "gap-target": 1
+      },
+      "gov_counts": {
+        "full": 133,
+        "mid": 2
+      },
+      "by_sym": {
+        "BTC": 114,
+        "US100": 21
+      },
+      "ho_net": 36872.924718999835,
+      "ho_pace": 3766.4826457931376,
+      "fit_net": 26598.965170000163,
+      "leave_drop": [
+        "2026-06",
+        "2026-03"
+      ],
+      "leave_net": 18962.842268999866,
+      "leave_ok": true,
+      "ext_net": -2634.1280090000027,
+      "ext_status": "measured",
+      "ext_available": true,
+      "max_dd": 0.0522399756619007,
+      "worst_day": "2026-09-28",
+      "worst_pct": -0.015344602685830624,
+      "n_fail_days": 0,
+      "legal": true,
+      "n60": 0,
+      "w60": 909,
+      "n90": 0,
+      "w90": 879,
+      "p90": [],
+      "n90_ho": 0,
+      "nseq": 0,
+      "wseq": 879,
+      "pseq": [],
+      "nseq_ho": 0,
+      "has_90": false,
+      "has_90_ho": false,
+      "decision": "REJECT",
+      "final_equity": 160837.76188000003,
+      "peak_equity": 163471.889889,
+      "explorer_xcheck": {
+        "countable": 0,
+        "outside_countable": 0,
+        "outside_windows": [],
+        "best_outside_pct": 12.63071552085151,
+        "best_outside_months": [
+          "2024-06",
+          "2024-07",
+          "2024-08"
+        ],
+        "full_sample_dd": -0.0522399756619007,
+        "final_equity": 160837.76188000003
+      },
+      "meta": {
+        "funnel": {
+          "gov_full": 133,
+          "taken": 135,
+          "taken_BTC": 114,
+          "taken_US100": 21,
+          "gov_mid": 2
+        },
+        "final_equity": 160837.76188000003,
+        "peak_equity": 163471.889889,
+        "killed_days": 0,
+        "chassis": "us100nr7+btc-joint+softgov",
+        "taken": 135,
+        "use_gov": true,
+        "symbol": "JOINT",
+        "n_signals_in": 135,
+        "allow_simultaneous": true
+      }
+    }
+  ],
+  "data": {
+    "us100_sha": "5d833b201f3374797bd64ae50e2937af21affc1a52ef33a2119d316d35fdd3af",
+    "us100_end": "2026-09-01 23:58:00+00:00",
+    "btc_sha": "437a2c36f6ac9da5684533f9cde17e029f177abacab30579cd2c30e625443829",
+    "btc_end": "2026-10-07 11:34:00+00:00"
+  }
+}
