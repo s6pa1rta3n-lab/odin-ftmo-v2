@@ -1,0 +1,4 @@
+**NO — joint C15 BTC + C21B XAG soft does not clear C17 residual / deployable ~3mo path.** 29C: DD 6.6% legal=True, HO ~$1,261/mo, ≤90d HO-era 0, leave-out $+2,461.
+29A|BTC|gov=True|REJECT|pace=$672/mo|DD=4.0%|90d=0/879(HO=0)|seq=0/879(HO=0)|legal=True|leave=1655|ext=-916.0677100000007
+29B|XAG|gov=True|REJECT|pace=$501/mo|DD=5.6%|90d=0/838(HO=0)|seq=0/838(HO=0)|legal=True|leave=-3144|ext=N/A
+29C|JOINT|gov=True|REJECT|pace=$1261/mo|DD=6.6%|90d=0/879(HO=0)|seq=0/879(HO=0)|legal=True|leave=2461|ext=-969.6562720000006
