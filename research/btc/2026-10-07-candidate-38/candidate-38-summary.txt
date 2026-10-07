@@ -1,0 +1,2 @@
+C38 USA30 Wilder SAR → primary=REJECT via 38B+soft | 38A=REJECT DD=20.71% HO=$-1,618/mo 90d=0/884(HO=0) out=0 leave=$-22,269 legal=False | 38B soft=REJECT DD=11.36% HO=$-557/mo 90d=0/884(HO=0) out=0 leave=$-7,322 legal=False | sens@2.60%=REJECT DD=21.43%
+Live C4 untouched. Research only.
