@@ -1,0 +1,2 @@
+C32 USA30 three-close → primary=REJECT via 32A@2.50% | 32A=REJECT DD=22.42% HO=$405/mo 90d=0/866(HO=0) out=0 leave=$26 legal=False | 32B soft=REJECT DD=12.32% HO=$138/mo 90d=0/866(HO=0) out=0 leave=$72 legal=False | sens@2.60%=REJECT DD=23.22%
+Live C4 untouched. Research only.
