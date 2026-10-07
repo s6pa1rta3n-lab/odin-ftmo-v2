@@ -1,0 +1,843 @@
+{
+  "candidate": 47,
+  "measured": "2026-10-07 13:15 ET",
+  "lead": "**CONDITIONAL \u2014 XAG soft-2.00 + US100 NR7 sat legal/windows incomplete** via 47E: max DD 6.9%, HO\u226490d 15, HO ~$1,429/mo, leave $-1,096 (\u0394 vs 47A +5,314). Ext: UNAVAILABLE (feeds end 2026-09-01; no dukas-ext). Not ACCEPT.",
+  "primary": "47E",
+  "decision": "CONDITIONAL",
+  "xag_window_survival": "47A HO\u226490d=0 leave=-6410 \u2192 47C HO\u226490d=14 DD=7.7% leave=-5228 (\u0394+1182) | 47D HO\u226490d=14 DD=7.2% leave=-2807 (\u0394+3603) | 47E HO\u226490d=15 DD=6.9% leave=-1096 (\u0394+5314) | windows_survived=Y",
+  "windows_survived": true,
+  "leave_a": -6410.000000000003,
+  "assumptions": {
+    "xag_contract": 5000.0,
+    "xag_spread": 0.025,
+    "xag_commission": 3.0,
+    "xag_risks": [
+      0.02,
+      0.01,
+      0.006
+    ],
+    "us100_spread": 1.0,
+    "us100_contract": 1.0,
+    "us100_fixed": [
+      0.0015,
+      0.0025,
+      0.0035
+    ],
+    "btc": "excluded",
+    "gold": "excluded",
+    "note": "soft-2.00 downshift + tiny NR7 retest; prior drop was soft-2.50"
+  },
+  "books": [
+    {
+      "label": "47A XAG soft-2.00 alone",
+      "book": "47A",
+      "symbol": "XAG",
+      "use_gov": true,
+      "full_risk": 0.02,
+      "mid_risk": 0.01,
+      "floor_risk": 0.006,
+      "n_trades": 56,
+      "wins": 30,
+      "wr": 0.5357142857142857,
+      "longs": 44,
+      "shorts": 12,
+      "reasons": {
+        "SL": 14,
+        "TP": 24,
+        "TIME": 17,
+        "SL_OPEN": 1
+      },
+      "gov_counts": {
+        "full": 42,
+        "mid": 14
+      },
+      "by_sym": {
+        "XAG": 56
+      },
+      "ho_net": 6153.729999999993,
+      "ho_pace": 628.5890644295295,
+      "fit_net": 4123.949999999988,
+      "leave_drop": [
+        "2026-01",
+        "2025-12"
+      ],
+      "leave_net": -6410.000000000003,
+      "leave_ok": false,
+      "ext_net": 0.0,
+      "ext_status": "UNAVAILABLE (feeds end 2026-09-01; no dukas-ext)",
+      "ext_available": false,
+      "max_dd": 0.07837573176602114,
+      "worst_day": "2026-03-04",
+      "worst_pct": -0.02165026321251081,
+      "n_fail_days": 0,
+      "legal": true,
+      "n60": 0,
+      "w60": 868,
+      "n90": 0,
+      "w90": 838,
+      "p90": [],
+      "n90_ho": 0,
+      "nseq": 0,
+      "wseq": 838,
+      "pseq": [],
+      "nseq_ho": 0,
+      "has_90": false,
+      "has_90_ho": false,
+      "decision": "REJECT",
+      "final_equity": 110277.67999999996,
+      "peak_equity": 117160.65999999999,
+      "meta": {
+        "funnel": {
+          "gov_full": 42,
+          "taken": 56,
+          "taken_XAG": 56,
+          "gov_mid": 14
+        },
+        "final_equity": 110277.67999999996,
+        "peak_equity": 117160.65999999999,
+        "killed_days": 0,
+        "chassis": "xag-soft-2.00",
+        "taken": 56,
+        "use_gov": true,
+        "symbol": "XAG",
+        "n_signals_in": 56,
+        "mode": "single",
+        "us100_fixed": null
+      },
+      "explorer_xcheck": {
+        "countable": 0,
+        "outside_countable": 0,
+        "outside_windows": [],
+        "best_outside_pct": 5.184672199292106,
+        "best_outside_months": [
+          "2024-03",
+          "2024-04",
+          "2024-05"
+        ],
+        "full_sample_dd": -0.07837573176602114,
+        "final_equity": 110277.67999999996
+      }
+    },
+    {
+      "label": "47B US100 NR7 FIXED 0.15%",
+      "book": "47B",
+      "symbol": "US100",
+      "use_gov": false,
+      "full_risk": 0.0015,
+      "mid_risk": 0.0015,
+      "floor_risk": 0.0015,
+      "n_trades": 21,
+      "wins": 20,
+      "wr": 0.9523809523809523,
+      "longs": 18,
+      "shorts": 3,
+      "reasons": {
+        "TP": 20,
+        "SL": 1
+      },
+      "gov_counts": {
+        "fixed": 21
+      },
+      "by_sym": {
+        "US100": 21
+      },
+      "ho_net": 2190.081279999985,
+      "ho_pace": 223.71165826577027,
+      "fit_net": 3775.4501300000197,
+      "leave_drop": [
+        "2026-04",
+        "2026-06"
+      ],
+      "leave_net": 1246.6048799999978,
+      "leave_ok": true,
+      "ext_net": 0.0,
+      "ext_status": "UNAVAILABLE (feeds end 2026-09-01; no dukas-ext)",
+      "ext_available": false,
+      "max_dd": 0.001504762818630349,
+      "worst_day": "2025-02-21",
+      "worst_pct": -0.0015047628186303686,
+      "n_fail_days": 0,
+      "legal": true,
+      "n60": 0,
+      "w60": 762,
+      "n90": 0,
+      "w90": 732,
+      "p90": [],
+      "n90_ho": 0,
+      "nseq": 0,
+      "wseq": 732,
+      "pseq": [],
+      "nseq_ho": 0,
+      "has_90": false,
+      "has_90_ho": false,
+      "decision": "REJECT",
+      "final_equity": 105965.53141000003,
+      "peak_equity": 105965.53141000003,
+      "meta": {
+        "funnel": {
+          "gov_fixed": 21,
+          "taken": 21,
+          "taken_US100": 21
+        },
+        "final_equity": 105965.53141000003,
+        "peak_equity": 105965.53141000003,
+        "killed_days": 0,
+        "chassis": "us100-nr7-fixed-0.15",
+        "taken": 21,
+        "use_gov": false,
+        "symbol": "US100",
+        "n_signals_in": 21,
+        "mode": "single",
+        "us100_fixed": 0.0015
+      },
+      "explorer_xcheck": {
+        "countable": 0,
+        "outside_countable": 0,
+        "outside_windows": [],
+        "best_outside_pct": 1.2012419351453474,
+        "best_outside_months": [
+          "2026-04",
+          "2026-05",
+          "2026-06"
+        ],
+        "full_sample_dd": -0.001504762818630349,
+        "final_equity": 105965.53141000003
+      }
+    },
+    {
+      "label": "47C XAG soft-2.00 + NR7 0.15%",
+      "book": "47C",
+      "symbol": "JOINT",
+      "use_gov": true,
+      "full_risk": 0.021500000000000002,
+      "mid_risk": 0.0115,
+      "floor_risk": 0.0075,
+      "n_trades": 77,
+      "wins": 50,
+      "wr": 0.6493506493506493,
+      "longs": 62,
+      "shorts": 15,
+      "reasons": {
+        "SL": 15,
+        "TP": 44,
+        "TIME": 17,
+        "SL_OPEN": 1
+      },
+      "gov_counts": {
+        "full": 49,
+        "fixed": 21,
+        "mid": 7
+      },
+      "by_sym": {
+        "XAG": 56,
+        "US100": 21
+      },
+      "ho_net": 8379.830679999974,
+      "ho_pace": 855.9800197959704,
+      "fit_net": 7714.7589900000075,
+      "leave_drop": [
+        "2026-01",
+        "2025-12"
+      ],
+      "leave_net": -5228.237400000022,
+      "leave_ok": false,
+      "ext_net": 0.0,
+      "ext_status": "UNAVAILABLE (feeds end 2026-09-01; no dukas-ext)",
+      "ext_available": false,
+      "max_dd": 0.07674078389586361,
+      "worst_day": "2026-06-14",
+      "worst_pct": -0.023677723067375794,
+      "n_fail_days": 0,
+      "legal": true,
+      "n60": 0,
+      "w60": 868,
+      "n90": 14,
+      "w90": 838,
+      "p90": [
+        {
+          "start": "2025-11-16",
+          "end": "2026-02-13",
+          "start_eq": 105518.59899000001,
+          "max_mult": 1.1559257179064633,
+          "min_mult": 1.0029673936443153,
+          "worst_day": -0.020757936330983155
+        },
+        {
+          "start": "2025-11-17",
+          "end": "2026-02-14",
+          "start_eq": 105518.59899000001,
+          "max_mult": 1.1559257179064633,
+          "min_mult": 1.0029673936443153,
+          "worst_day": -0.020757936330983155
+        },
+        {
+          "start": "2025-11-18",
+          "end": "2026-02-15",
+          "start_eq": 105518.59899000001,
+          "max_mult": 1.1559257179064633,
+          "min_mult": 1.0029673936443153,
+          "worst_day": -0.020757936330983155
+        },
+        {
+          "start": "2025-11-19",
+          "end": "2026-02-16",
+          "start_eq": 105518.59899000001,
+          "max_mult": 1.1559257179064633,
+          "min_mult": 1.0029673936443153,
+          "worst_day": -0.020757936330983155
+        },
+        {
+          "start": "2025-11-20",
+          "end": "2026-02-17",
+          "start_eq": 105518.59899000001,
+          "max_mult": 1.1559257179064633,
+          "min_mult": 1.0029673936443153,
+          "worst_day": -0.020757936330983155
+        },
+        {
+          "start": "2025-11-21",
+          "end": "2026-02-18",
+          "start_eq": 105518.59899000001,
+          "max_mult": 1.1559257179064633,
+          "min_mult": 1.0029673936443153,
+          "worst_day": -0.020757936330983155
+        },
+        {
+          "start": "2025-11-22",
+          "end": "2026-02-19",
+          "start_eq": 105518.59899000001,
+          "max_mult": 1.1559257179064633,
+          "min_mult": 1.0029673936443153,
+          "worst_day": -0.020757936330983155
+        },
+        {
+          "start": "2025-11-23",
+          "end": "2026-02-20",
+          "start_eq": 105518.59899000001,
+          "max_mult": 1.1559257179064633,
+          "min_mult": 1.0029673936443153,
+          "worst_day": -0.020757936330983155
+        },
+        {
+          "start": "2025-11-24",
+          "end": "2026-02-21",
+          "start_eq": 105518.59899000001,
+          "max_mult": 1.1559257179064633,
+          "min_mult": 1.0029673936443153,
+          "worst_day": -0.020757936330983155
+        },
+        {
+          "start": "2025-11-25",
+          "end": "2026-02-22",
+          "start_eq": 105518.59899000001,
+          "max_mult": 1.1559257179064633,
+          "min_mult": 1.0029673936443153,
+          "worst_day": -0.020757936330983155
+        },
+        {
+          "start": "2025-11-26",
+          "end": "2026-02-23",
+          "start_eq": 105518.59899000001,
+          "max_mult": 1.1559257179064633,
+          "min_mult": 1.0029673936443153,
+          "worst_day": -0.020757936330983155
+        },
+        {
+          "start": "2025-11-27",
+          "end": "2026-02-24",
+          "start_eq": 105518.59899000001,
+          "max_mult": 1.1559257179064633,
+          "min_mult": 1.0029673936443153,
+          "worst_day": -0.020757936330983155
+        },
+        {
+          "start": "2025-11-28",
+          "end": "2026-02-25",
+          "start_eq": 105518.59899000001,
+          "max_mult": 1.1559257179064633,
+          "min_mult": 1.0029673936443153,
+          "worst_day": -0.020757936330983155
+        },
+        {
+          "start": "2025-11-29",
+          "end": "2026-02-26",
+          "start_eq": 105518.59899000001,
+          "max_mult": 1.1559257179064633,
+          "min_mult": 1.0029673936443153,
+          "worst_day": -0.020757936330983155
+        }
+      ],
+      "n90_ho": 14,
+      "nseq": 0,
+      "wseq": 838,
+      "pseq": [],
+      "nseq_ho": 0,
+      "has_90": true,
+      "has_90_ho": true,
+      "decision": "CONDITIONAL",
+      "final_equity": 116094.58966999994,
+      "peak_equity": 121971.66228999998,
+      "meta": {
+        "funnel": {
+          "gov_full": 49,
+          "taken": 77,
+          "taken_XAG": 56,
+          "gov_fixed": 21,
+          "taken_US100": 21,
+          "gov_mid": 7
+        },
+        "final_equity": 116094.58966999994,
+        "peak_equity": 121971.66228999998,
+        "killed_days": 0,
+        "chassis": "xag-soft-2.00+us100-nr7-0.15",
+        "taken": 77,
+        "use_gov": true,
+        "symbol": "JOINT",
+        "n_signals_in": 77,
+        "mode": "dual",
+        "us100_fixed": 0.0015
+      },
+      "explorer_xcheck": {
+        "countable": 0,
+        "outside_countable": 0,
+        "outside_windows": [],
+        "best_outside_pct": 5.710302888376773,
+        "best_outside_months": [
+          "2024-03",
+          "2024-04",
+          "2024-05"
+        ],
+        "full_sample_dd": -0.07674078389586361,
+        "final_equity": 116094.58966999994
+      }
+    },
+    {
+      "label": "47D XAG soft-2.00 + NR7 0.25%",
+      "book": "47D",
+      "symbol": "JOINT",
+      "use_gov": true,
+      "full_risk": 0.0225,
+      "mid_risk": 0.0125,
+      "floor_risk": 0.0085,
+      "n_trades": 77,
+      "wins": 50,
+      "wr": 0.6493506493506493,
+      "longs": 62,
+      "shorts": 15,
+      "reasons": {
+        "SL": 15,
+        "TP": 44,
+        "TIME": 17,
+        "SL_OPEN": 1
+      },
+      "gov_counts": {
+        "full": 51,
+        "fixed": 21,
+        "mid": 5
+      },
+      "by_sym": {
+        "XAG": 56,
+        "US100": 21
+      },
+      "ho_net": 11609.826299999957,
+      "ho_pace": 1185.9164851409353,
+      "fit_net": 11575.082980000021,
+      "leave_drop": [
+        "2026-01",
+        "2025-12"
+      ],
+      "leave_net": -2806.675380000033,
+      "leave_ok": false,
+      "ext_net": 0.0,
+      "ext_status": "UNAVAILABLE (feeds end 2026-09-01; no dukas-ext)",
+      "ext_available": false,
+      "max_dd": 0.07186792819961434,
+      "worst_day": "2026-06-14",
+      "worst_pct": -0.022592227972587562,
+      "n_fail_days": 0,
+      "legal": true,
+      "n60": 0,
+      "w60": 868,
+      "n90": 14,
+      "w90": 838,
+      "p90": [
+        {
+          "start": "2025-11-16",
+          "end": "2026-02-13",
+          "start_eq": 109378.92297999996,
+          "max_mult": 1.159905316705286,
+          "min_mult": 1.0049542418707038,
+          "worst_day": -0.019956617632591052
+        },
+        {
+          "start": "2025-11-17",
+          "end": "2026-02-14",
+          "start_eq": 109378.92297999996,
+          "max_mult": 1.159905316705286,
+          "min_mult": 1.0049542418707038,
+          "worst_day": -0.019956617632591052
+        },
+        {
+          "start": "2025-11-18",
+          "end": "2026-02-15",
+          "start_eq": 109378.92297999996,
+          "max_mult": 1.159905316705286,
+          "min_mult": 1.0049542418707038,
+          "worst_day": -0.019956617632591052
+        },
+        {
+          "start": "2025-11-19",
+          "end": "2026-02-16",
+          "start_eq": 109378.92297999996,
+          "max_mult": 1.159905316705286,
+          "min_mult": 1.0049542418707038,
+          "worst_day": -0.019956617632591052
+        },
+        {
+          "start": "2025-11-20",
+          "end": "2026-02-17",
+          "start_eq": 109378.92297999996,
+          "max_mult": 1.159905316705286,
+          "min_mult": 1.0049542418707038,
+          "worst_day": -0.019956617632591052
+        },
+        {
+          "start": "2025-11-21",
+          "end": "2026-02-18",
+          "start_eq": 109378.92297999996,
+          "max_mult": 1.159905316705286,
+          "min_mult": 1.0049542418707038,
+          "worst_day": -0.019956617632591052
+        },
+        {
+          "start": "2025-11-22",
+          "end": "2026-02-19",
+          "start_eq": 109378.92297999996,
+          "max_mult": 1.159905316705286,
+          "min_mult": 1.0049542418707038,
+          "worst_day": -0.019956617632591052
+        },
+        {
+          "start": "2025-11-23",
+          "end": "2026-02-20",
+          "start_eq": 109378.92297999996,
+          "max_mult": 1.159905316705286,
+          "min_mult": 1.0049542418707038,
+          "worst_day": -0.019956617632591052
+        },
+        {
+          "start": "2025-11-24",
+          "end": "2026-02-21",
+          "start_eq": 109378.92297999996,
+          "max_mult": 1.159905316705286,
+          "min_mult": 1.0049542418707038,
+          "worst_day": -0.019956617632591052
+        },
+        {
+          "start": "2025-11-25",
+          "end": "2026-02-22",
+          "start_eq": 109378.92297999996,
+          "max_mult": 1.159905316705286,
+          "min_mult": 1.0049542418707038,
+          "worst_day": -0.019956617632591052
+        },
+        {
+          "start": "2025-11-26",
+          "end": "2026-02-23",
+          "start_eq": 109378.92297999996,
+          "max_mult": 1.159905316705286,
+          "min_mult": 1.0049542418707038,
+          "worst_day": -0.019956617632591052
+        },
+        {
+          "start": "2025-11-27",
+          "end": "2026-02-24",
+          "start_eq": 109378.92297999996,
+          "max_mult": 1.159905316705286,
+          "min_mult": 1.0049542418707038,
+          "worst_day": -0.019956617632591052
+        },
+        {
+          "start": "2025-11-28",
+          "end": "2026-02-25",
+          "start_eq": 109378.92297999996,
+          "max_mult": 1.159905316705286,
+          "min_mult": 1.0049542418707038,
+          "worst_day": -0.019956617632591052
+        },
+        {
+          "start": "2025-11-29",
+          "end": "2026-02-26",
+          "start_eq": 109378.92297999996,
+          "max_mult": 1.159905316705286,
+          "min_mult": 1.0049542418707038,
+          "worst_day": -0.019956617632591052
+        }
+      ],
+      "n90_ho": 14,
+      "nseq": 0,
+      "wseq": 838,
+      "pseq": [],
+      "nseq_ho": 0,
+      "has_90": true,
+      "has_90_ho": true,
+      "decision": "CONDITIONAL",
+      "final_equity": 123184.9092799999,
+      "peak_equity": 126869.19429999993,
+      "meta": {
+        "funnel": {
+          "gov_full": 51,
+          "taken": 77,
+          "taken_XAG": 56,
+          "gov_fixed": 21,
+          "taken_US100": 21,
+          "gov_mid": 5
+        },
+        "final_equity": 123184.9092799999,
+        "peak_equity": 126869.19429999993,
+        "killed_days": 0,
+        "chassis": "xag-soft-2.00+us100-nr7-0.25",
+        "taken": 77,
+        "use_gov": true,
+        "symbol": "JOINT",
+        "n_signals_in": 77,
+        "mode": "dual",
+        "us100_fixed": 0.0025
+      },
+      "explorer_xcheck": {
+        "countable": 0,
+        "outside_countable": 0,
+        "outside_windows": [],
+        "best_outside_pct": 6.114421589652541,
+        "best_outside_months": [
+          "2024-03",
+          "2024-04",
+          "2024-05"
+        ],
+        "full_sample_dd": -0.07186792819961434,
+        "final_equity": 123184.9092799999
+      }
+    },
+    {
+      "label": "47E XAG soft-2.00 + NR7 0.35%",
+      "book": "47E",
+      "symbol": "JOINT",
+      "use_gov": true,
+      "full_risk": 0.0235,
+      "mid_risk": 0.0135,
+      "floor_risk": 0.0095,
+      "n_trades": 77,
+      "wins": 50,
+      "wr": 0.6493506493506493,
+      "longs": 62,
+      "shorts": 15,
+      "reasons": {
+        "SL": 15,
+        "TP": 44,
+        "TIME": 17,
+        "SL_OPEN": 1
+      },
+      "gov_counts": {
+        "full": 52,
+        "fixed": 21,
+        "mid": 4
+      },
+      "by_sym": {
+        "XAG": 56,
+        "US100": 21
+      },
+      "ho_net": 13989.162319999945,
+      "ho_pace": 1428.9600705395917,
+      "fit_net": 13161.159290000029,
+      "leave_drop": [
+        "2026-01",
+        "2025-12"
+      ],
+      "leave_net": -1095.8929600000465,
+      "leave_ok": false,
+      "ext_net": 0.0,
+      "ext_status": "UNAVAILABLE (feeds end 2026-09-01; no dukas-ext)",
+      "ext_available": false,
+      "max_dd": 0.06871935511278879,
+      "worst_day": "2026-06-14",
+      "worst_pct": -0.02194092014366437,
+      "n_fail_days": 0,
+      "legal": true,
+      "n60": 10,
+      "w60": 868,
+      "n90": 25,
+      "w90": 838,
+      "p90": [
+        {
+          "start": "2025-11-16",
+          "end": "2026-02-13",
+          "start_eq": 110827.73929000001,
+          "max_mult": 1.16589250072034,
+          "min_mult": 1.006934685710668,
+          "worst_day": -0.01959458793689001
+        },
+        {
+          "start": "2025-11-17",
+          "end": "2026-02-14",
+          "start_eq": 110827.73929000001,
+          "max_mult": 1.16589250072034,
+          "min_mult": 1.006934685710668,
+          "worst_day": -0.01959458793689001
+        },
+        {
+          "start": "2025-11-18",
+          "end": "2026-02-15",
+          "start_eq": 110827.73929000001,
+          "max_mult": 1.16589250072034,
+          "min_mult": 1.006934685710668,
+          "worst_day": -0.01959458793689001
+        },
+        {
+          "start": "2025-11-19",
+          "end": "2026-02-16",
+          "start_eq": 110827.73929000001,
+          "max_mult": 1.16589250072034,
+          "min_mult": 1.006934685710668,
+          "worst_day": -0.01959458793689001
+        },
+        {
+          "start": "2025-11-20",
+          "end": "2026-02-17",
+          "start_eq": 110827.73929000001,
+          "max_mult": 1.16589250072034,
+          "min_mult": 1.006934685710668,
+          "worst_day": -0.01959458793689001
+        },
+        {
+          "start": "2025-11-21",
+          "end": "2026-02-18",
+          "start_eq": 110827.73929000001,
+          "max_mult": 1.16589250072034,
+          "min_mult": 1.006934685710668,
+          "worst_day": -0.01959458793689001
+        },
+        {
+          "start": "2025-11-22",
+          "end": "2026-02-19",
+          "start_eq": 110827.73929000001,
+          "max_mult": 1.16589250072034,
+          "min_mult": 1.006934685710668,
+          "worst_day": -0.01959458793689001
+        },
+        {
+          "start": "2025-11-23",
+          "end": "2026-02-20",
+          "start_eq": 110827.73929000001,
+          "max_mult": 1.16589250072034,
+          "min_mult": 1.006934685710668,
+          "worst_day": -0.01959458793689001
+        },
+        {
+          "start": "2025-11-24",
+          "end": "2026-02-21",
+          "start_eq": 110827.73929000001,
+          "max_mult": 1.16589250072034,
+          "min_mult": 1.006934685710668,
+          "worst_day": -0.01959458793689001
+        },
+        {
+          "start": "2025-11-25",
+          "end": "2026-02-22",
+          "start_eq": 110827.73929000001,
+          "max_mult": 1.16589250072034,
+          "min_mult": 1.006934685710668,
+          "worst_day": -0.01959458793689001
+        },
+        {
+          "start": "2025-11-26",
+          "end": "2026-02-23",
+          "start_eq": 110827.73929000001,
+          "max_mult": 1.16589250072034,
+          "min_mult": 1.006934685710668,
+          "worst_day": -0.01959458793689001
+        },
+        {
+          "start": "2025-11-27",
+          "end": "2026-02-24",
+          "start_eq": 110827.73929000001,
+          "max_mult": 1.16589250072034,
+          "min_mult": 1.006934685710668,
+          "worst_day": -0.01959458793689001
+        },
+        {
+          "start": "2025-11-28",
+          "end": "2026-02-25",
+          "start_eq": 110827.73929000001,
+          "max_mult": 1.16589250072034,
+          "min_mult": 1.006934685710668,
+          "worst_day": -0.01959458793689001
+        },
+        {
+          "start": "2025-11-29",
+          "end": "2026-02-26",
+          "start_eq": 110827.73929000001,
+          "max_mult": 1.16589250072034,
+          "min_mult": 1.006934685710668,
+          "worst_day": -0.01959458793689001
+        },
+        {
+          "start": "2025-11-30",
+          "end": "2026-02-27",
+          "start_eq": 111596.29483000001,
+          "max_mult": 1.157863084135873,
+          "min_mult": 1.0206340183919884,
+          "worst_day": -0.01959458793689001
+        }
+      ],
+      "n90_ho": 15,
+      "nseq": 0,
+      "wseq": 838,
+      "pseq": [],
+      "nseq_ho": 0,
+      "has_90": true,
+      "has_90_ho": true,
+      "decision": "CONDITIONAL",
+      "final_equity": 127150.32160999996,
+      "peak_equity": 129213.23010999999,
+      "meta": {
+        "funnel": {
+          "gov_full": 52,
+          "taken": 77,
+          "taken_XAG": 56,
+          "gov_fixed": 21,
+          "taken_US100": 21,
+          "gov_mid": 4
+        },
+        "final_equity": 127150.32160999996,
+        "peak_equity": 129213.23010999999,
+        "killed_days": 0,
+        "chassis": "xag-soft-2.00+us100-nr7-0.35",
+        "taken": 77,
+        "use_gov": true,
+        "symbol": "JOINT",
+        "n_signals_in": 77,
+        "mode": "dual",
+        "us100_fixed": 0.0035
+      },
+      "explorer_xcheck": {
+        "countable": 0,
+        "outside_countable": 0,
+        "outside_windows": [],
+        "best_outside_pct": 6.518252682332482,
+        "best_outside_months": [
+          "2024-03",
+          "2024-04",
+          "2024-05"
+        ],
+        "full_sample_dd": -0.06871935511278879,
+        "final_equity": 127150.32160999996
+      }
+    }
+  ],
+  "data": {
+    "xag_sha": "6970b0a1ef4bea4fc4c4deb6f4730ab78b719bd420c47955bfee72a6aa7afe1c",
+    "xag_end": "2026-09-01 23:59:00+00:00",
+    "us100_sha": "5d833b201f3374797bd64ae50e2937af21affc1a52ef33a2119d316d35fdd3af",
+    "us100_end": "2026-09-01 23:58:00+00:00"
+  }
+}
