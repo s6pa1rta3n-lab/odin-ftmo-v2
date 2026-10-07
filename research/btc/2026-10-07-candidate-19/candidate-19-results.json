@@ -1,0 +1,462 @@
+[
+  {
+    "label": "0.75% locked",
+    "book": "19A",
+    "risk": 0.0075,
+    "decision": "REJECT",
+    "legal": true,
+    "ho_net": 5522.533649999974,
+    "ho_pace": 564.1138399530174,
+    "fit_net": 1447.1930499999703,
+    "leave_net": -1315.304250000024,
+    "leave_drop": [
+      "2026-07",
+      "2025-12"
+    ],
+    "ext_net": 0.0,
+    "ext_status": "UNAVAILABLE (XAG feed ends 2026-09-01; no dukas-ext)",
+    "ext_ok": false,
+    "leave_ok": false,
+    "ho_ok": true,
+    "fit_ok": true,
+    "max_dd": 0.05810215949999998,
+    "worst_d": "2024-10-17",
+    "worst_pct": -0.008883496793713691,
+    "n_fail": 0,
+    "n60": 0,
+    "w60": 873,
+    "n90": 0,
+    "w90": 843,
+    "p90": [],
+    "nseq": 0,
+    "wseq": 843,
+    "pseq": [],
+    "n_trades": 83,
+    "wins": 33,
+    "losses": 50,
+    "longs": 47,
+    "shorts": 36,
+    "reasons": {
+      "stop": 49,
+      "target": 33,
+      "gap-stop": 1
+    },
+    "final_equity": 106969.72669999996,
+    "full_net": 6969.726699999956,
+    "residual_needed": 3144.8861600469827,
+    "dd_headroom": 0.041897840500000026,
+    "joint_dd_left_vs_c15": 0.0,
+    "meta": {
+      "signals": 119,
+      "taken": 83,
+      "skip": {
+        "atr": 13,
+        "bb": 105,
+        "in_trade": 36
+      },
+      "final_equity": 106969.72669999996,
+      "killed_days": 0,
+      "n_h4": 4414,
+      "n_squeeze": 583,
+      "chassis": "xag-h4-bb-squeeze"
+    }
+  },
+  {
+    "label": "0.50%",
+    "book": "19A",
+    "risk": 0.005,
+    "decision": "REJECT",
+    "legal": true,
+    "ho_net": 3659.7042999999817,
+    "ho_pace": 373.8301976241592,
+    "fit_net": 1078.8574499999809,
+    "leave_net": -965.1195000000157,
+    "leave_drop": [
+      "2026-07",
+      "2025-12"
+    ],
+    "ext_net": 0.0,
+    "ext_status": "UNAVAILABLE (XAG feed ends 2026-09-01; no dukas-ext)",
+    "ext_ok": false,
+    "leave_ok": false,
+    "ho_ok": true,
+    "fit_ok": true,
+    "max_dd": 0.039105649500000145,
+    "worst_d": "2024-10-17",
+    "worst_pct": -0.006003172562702325,
+    "n_fail": 0,
+    "n60": 0,
+    "w60": 873,
+    "n90": 0,
+    "w90": 843,
+    "p90": [],
+    "nseq": 0,
+    "wseq": 843,
+    "pseq": [],
+    "n_trades": 83,
+    "wins": 33,
+    "losses": 50,
+    "longs": 47,
+    "shorts": 36,
+    "reasons": {
+      "stop": 49,
+      "target": 33,
+      "gap-stop": 1
+    },
+    "final_equity": 104738.56174999992,
+    "full_net": 4738.561749999921,
+    "residual_needed": 3335.169802375841,
+    "dd_headroom": 0.06089435049999986,
+    "joint_dd_left_vs_c15": 0.0,
+    "meta": {
+      "signals": 119,
+      "taken": 83,
+      "skip": {
+        "atr": 13,
+        "bb": 105,
+        "in_trade": 36
+      },
+      "final_equity": 104738.56174999992,
+      "killed_days": 0,
+      "n_h4": 4414,
+      "n_squeeze": 583,
+      "chassis": "xag-h4-bb-squeeze"
+    }
+  },
+  {
+    "label": "1.00%",
+    "book": "19A",
+    "risk": 0.01,
+    "decision": "REJECT",
+    "legal": true,
+    "ho_net": 7499.470799999965,
+    "ho_pace": 766.0533260134192,
+    "fit_net": 1766.1964999999648,
+    "leave_net": -1598.6383000000314,
+    "leave_drop": [
+      "2026-07",
+      "2025-12"
+    ],
+    "ext_net": 0.0,
+    "ext_status": "UNAVAILABLE (XAG feed ends 2026-09-01; no dukas-ext)",
+    "ext_ok": false,
+    "leave_ok": false,
+    "ho_ok": true,
+    "fit_ok": true,
+    "max_dd": 0.07697997700000021,
+    "worst_d": "2024-10-17",
+    "worst_pct": -0.011799470580537354,
+    "n_fail": 0,
+    "n60": 0,
+    "w60": 873,
+    "n90": 0,
+    "w90": 843,
+    "p90": [],
+    "nseq": 0,
+    "wseq": 843,
+    "pseq": [],
+    "n_trades": 83,
+    "wins": 33,
+    "losses": 50,
+    "longs": 47,
+    "shorts": 36,
+    "reasons": {
+      "stop": 49,
+      "target": 33,
+      "gap-stop": 1
+    },
+    "final_equity": 109265.66729999991,
+    "full_net": 9265.667299999914,
+    "residual_needed": 2942.9466739865807,
+    "dd_headroom": 0.023020022999999792,
+    "joint_dd_left_vs_c15": 0.0,
+    "meta": {
+      "signals": 119,
+      "taken": 83,
+      "skip": {
+        "atr": 13,
+        "bb": 105,
+        "in_trade": 36
+      },
+      "final_equity": 109265.66729999991,
+      "killed_days": 0,
+      "n_h4": 4414,
+      "n_squeeze": 583,
+      "chassis": "xag-h4-bb-squeeze"
+    }
+  },
+  {
+    "label": "2.50% TP1R locked",
+    "book": "19B",
+    "risk": 0.025,
+    "decision": "REJECT",
+    "legal": false,
+    "ho_net": 8486.640599999993,
+    "ho_pace": 866.8904022281872,
+    "fit_net": 6369.759999999971,
+    "leave_net": -7269.732000000004,
+    "leave_drop": [
+      "2026-01",
+      "2025-12"
+    ],
+    "ext_net": 0.0,
+    "ext_status": "UNAVAILABLE (XAG feed ends 2026-09-01; no dukas-ext)",
+    "ext_ok": false,
+    "leave_ok": false,
+    "ho_ok": true,
+    "fit_ok": true,
+    "max_dd": 0.12361042228069416,
+    "worst_d": "2026-06-14",
+    "worst_pct": -0.02701051904325429,
+    "n_fail": 0,
+    "n60": 34,
+    "w60": 868,
+    "n90": 77,
+    "w90": 838,
+    "p90": [
+      {
+        "start": "2025-07-13",
+        "end": "2025-10-10",
+        "start_eq": 92943.52009999998,
+        "max_mult": 1.174043943919873,
+        "min_mult": 1.0146885979628397,
+        "worst_day": 0.0
+      },
+      {
+        "start": "2025-07-14",
+        "end": "2025-10-11",
+        "start_eq": 92943.52009999998,
+        "max_mult": 1.174043943919873,
+        "min_mult": 1.0146885979628397,
+        "worst_day": 0.0
+      },
+      {
+        "start": "2025-07-15",
+        "end": "2025-10-12",
+        "start_eq": 92943.52009999998,
+        "max_mult": 1.174043943919873,
+        "min_mult": 1.0146885979628397,
+        "worst_day": 0.0
+      },
+      {
+        "start": "2025-07-16",
+        "end": "2025-10-13",
+        "start_eq": 92943.52009999998,
+        "max_mult": 1.174043943919873,
+        "min_mult": 1.0146885979628397,
+        "worst_day": 0.0
+      },
+      {
+        "start": "2025-07-17",
+        "end": "2025-10-14",
+        "start_eq": 92943.52009999998,
+        "max_mult": 1.174043943919873,
+        "min_mult": 1.0146885979628397,
+        "worst_day": 0.0
+      },
+      {
+        "start": "2025-07-18",
+        "end": "2025-10-15",
+        "start_eq": 92943.52009999998,
+        "max_mult": 1.174043943919873,
+        "min_mult": 1.0146885979628397,
+        "worst_day": 0.0
+      },
+      {
+        "start": "2025-07-19",
+        "end": "2025-10-16",
+        "start_eq": 92943.52009999998,
+        "max_mult": 1.174043943919873,
+        "min_mult": 1.0146885979628397,
+        "worst_day": 0.0
+      },
+      {
+        "start": "2025-07-20",
+        "end": "2025-10-17",
+        "start_eq": 92943.52009999998,
+        "max_mult": 1.174043943919873,
+        "min_mult": 1.0146885979628397,
+        "worst_day": 0.0
+      },
+      {
+        "start": "2025-07-21",
+        "end": "2025-10-18",
+        "start_eq": 92943.52009999998,
+        "max_mult": 1.174043943919873,
+        "min_mult": 1.0146885979628397,
+        "worst_day": 0.0
+      },
+      {
+        "start": "2025-07-22",
+        "end": "2025-10-19",
+        "start_eq": 92943.52009999998,
+        "max_mult": 1.174043943919873,
+        "min_mult": 1.0146885979628397,
+        "worst_day": 0.0
+      },
+      {
+        "start": "2025-07-23",
+        "end": "2025-10-20",
+        "start_eq": 92943.52009999998,
+        "max_mult": 1.174043943919873,
+        "min_mult": 1.0146885979628397,
+        "worst_day": 0.0
+      },
+      {
+        "start": "2025-07-24",
+        "end": "2025-10-21",
+        "start_eq": 92943.52009999998,
+        "max_mult": 1.174043943919873,
+        "min_mult": 1.0146885979628397,
+        "worst_day": 0.0
+      },
+      {
+        "start": "2025-07-25",
+        "end": "2025-10-22",
+        "start_eq": 94308.73009999999,
+        "max_mult": 1.1570485233370773,
+        "min_mult": 1.0245756675712039,
+        "worst_day": -0.025201819304672718
+      },
+      {
+        "start": "2025-07-26",
+        "end": "2025-10-23",
+        "start_eq": 94308.73009999999,
+        "max_mult": 1.1570485233370773,
+        "min_mult": 1.0245756675712039,
+        "worst_day": -0.025201819304672718
+      },
+      {
+        "start": "2025-07-27",
+        "end": "2025-10-24",
+        "start_eq": 94308.73009999999,
+        "max_mult": 1.1570485233370773,
+        "min_mult": 1.0245756675712039,
+        "worst_day": -0.025201819304672718
+      }
+    ],
+    "nseq": 60,
+    "wseq": 838,
+    "pseq": [
+      {
+        "start": "2025-07-13",
+        "challenge_done": "2025-09-27",
+        "verification_done": "2025-10-10",
+        "total_days": 90
+      },
+      {
+        "start": "2025-07-14",
+        "challenge_done": "2025-09-27",
+        "verification_done": "2025-10-10",
+        "total_days": 89
+      },
+      {
+        "start": "2025-07-15",
+        "challenge_done": "2025-09-27",
+        "verification_done": "2025-10-10",
+        "total_days": 88
+      },
+      {
+        "start": "2025-07-16",
+        "challenge_done": "2025-09-27",
+        "verification_done": "2025-10-10",
+        "total_days": 87
+      },
+      {
+        "start": "2025-07-17",
+        "challenge_done": "2025-09-27",
+        "verification_done": "2025-10-10",
+        "total_days": 86
+      },
+      {
+        "start": "2025-07-18",
+        "challenge_done": "2025-09-27",
+        "verification_done": "2025-10-10",
+        "total_days": 85
+      },
+      {
+        "start": "2025-07-19",
+        "challenge_done": "2025-09-27",
+        "verification_done": "2025-10-10",
+        "total_days": 84
+      },
+      {
+        "start": "2025-07-20",
+        "challenge_done": "2025-09-27",
+        "verification_done": "2025-10-10",
+        "total_days": 83
+      },
+      {
+        "start": "2025-07-21",
+        "challenge_done": "2025-09-27",
+        "verification_done": "2025-10-10",
+        "total_days": 82
+      },
+      {
+        "start": "2025-07-22",
+        "challenge_done": "2025-09-27",
+        "verification_done": "2025-10-10",
+        "total_days": 81
+      },
+      {
+        "start": "2025-07-23",
+        "challenge_done": "2025-09-27",
+        "verification_done": "2025-10-10",
+        "total_days": 80
+      },
+      {
+        "start": "2025-07-24",
+        "challenge_done": "2025-09-27",
+        "verification_done": "2025-10-10",
+        "total_days": 79
+      },
+      {
+        "start": "2025-07-25",
+        "challenge_done": "2025-09-27",
+        "verification_done": "2025-10-10",
+        "total_days": 78
+      },
+      {
+        "start": "2025-07-26",
+        "challenge_done": "2025-09-27",
+        "verification_done": "2025-10-10",
+        "total_days": 77
+      },
+      {
+        "start": "2025-07-27",
+        "challenge_done": "2025-09-27",
+        "verification_done": "2025-10-10",
+        "total_days": 76
+      }
+    ],
+    "n_trades": 56,
+    "wins": 30,
+    "losses": 26,
+    "longs": 44,
+    "shorts": 12,
+    "reasons": {
+      "SL": 14,
+      "TP": 24,
+      "TIME": 17,
+      "SL_OPEN": 1
+    },
+    "final_equity": 114856.40059999995,
+    "full_net": 14856.40059999995,
+    "residual_needed": null,
+    "dd_headroom": null,
+    "joint_dd_left_vs_c15": null,
+    "meta": {
+      "funnel": {
+        "no_break": 447,
+        "signals": 56,
+        "ignored_in_pos": 47
+      },
+      "final_equity": 114856.40059999995,
+      "killed_days": 0,
+      "n_daily": 833,
+      "unfinished": 0,
+      "chassis": "xag-donchian-20d-dual-1r",
+      "taken": 56
+    }
+  }
+]
