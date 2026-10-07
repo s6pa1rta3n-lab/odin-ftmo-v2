@@ -1,0 +1,7 @@
+**CONDITIONAL — US100 NR7 + XAG Donchian soft legal DD + windows, not ACCEPT** via 35D (35D joint + soft gov (verdict)): max DD 6.6%, ≤90d 107/838 (HO-era 0), seq HO-era 0, HO ~$3,011/mo.
+
+XAG_WINDOW_SURVIVAL|35B HO≤90d=8 → 35D joint HO≤90d=0 (seq HO 0→0)
+35A|US100|gov=True|REJECT|pace=$1931/mo|DD=1.0%|90d=0/732(HO=0)|seq=0/732(HO=0)|legal=True|leave=10588|xcheck_out=0/0 best=8.20896311077519
+35B|XAG|gov=True|CONDITIONAL|pace=$847/mo|DD=9.4%|90d=48/838(HO=8)|seq=60/838(HO=0)|legal=True|leave=-6976|xcheck_out=0/1 best=6.435126039242833
+35C|JOINT|gov=False|CONDITIONAL|pace=$3372/mo|DD=7.1%|90d=120/838(HO=0)|seq=68/838(HO=0)|legal=True|leave=8793|xcheck_out=0/2 best=10.529687677038812
+35D|JOINT|gov=True|CONDITIONAL|pace=$3011/mo|DD=6.6%|90d=107/838(HO=0)|seq=68/838(HO=0)|legal=True|leave=5783|xcheck_out=0/2 best=10.529687677038812
