@@ -1,0 +1,8 @@
+**YES — ACCEPT pass-path** via 48E: max DD 6.7%, HO≤90d 15, leave $2,422, HO ~$1,926/mo. Ext: UNAVAILABLE (feeds end 2026-09-01; no dukas-ext) (N/A OK). **Still no live deploy from this research pack.**
+
+XAG_WINDOW_SURVIVAL|48A HO≤90d=15 leave=-1096 → 48A HO≤90d=15 DD=6.9% leave=-1096 (Δ+0) | 48B HO≤90d=15 DD=6.6% leave=-269 (Δ+827) | 48C HO≤90d=15 DD=6.4% leave=814 (Δ+1910) | 48D HO≤90d=15 DD=6.2% leave=1036 (Δ+2131) | 48E HO≤90d=15 DD=6.7% leave=2422 (Δ+3518) | windows_survived=Y
+48A|JOINT|CONDITIONAL|pace=$1429/mo|DD=6.9%|90HO=15|leave=-1096|dLeave=+0|Ext=N/A|legal=True
+48B|JOINT|CONDITIONAL|pace=$1545/mo|DD=6.6%|90HO=15|leave=-269|dLeave=+827|Ext=N/A|legal=True
+48C|JOINT|ACCEPT|pace=$1670/mo|DD=6.4%|90HO=15|leave=814|dLeave=+1910|Ext=N/A|legal=True
+48D|JOINT|ACCEPT|pace=$1756/mo|DD=6.2%|90HO=15|leave=1036|dLeave=+2131|Ext=N/A|legal=True
+48E|JOINT|ACCEPT|pace=$1926/mo|DD=6.7%|90HO=15|leave=2422|dLeave=+3518|Ext=N/A|legal=True
