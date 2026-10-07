@@ -1,0 +1,8 @@
+**CONDITIONAL — XAG soft-2.00 + US100 NR7 sat legal/windows incomplete** via 47E: max DD 6.9%, HO≤90d 15, HO ~$1,429/mo, leave $-1,096 (Δ vs 47A +5,314). Ext: UNAVAILABLE (feeds end 2026-09-01; no dukas-ext). Not ACCEPT.
+
+XAG_WINDOW_SURVIVAL|47A HO≤90d=0 leave=-6410 → 47C HO≤90d=14 DD=7.7% leave=-5228 (Δ+1182) | 47D HO≤90d=14 DD=7.2% leave=-2807 (Δ+3603) | 47E HO≤90d=15 DD=6.9% leave=-1096 (Δ+5314) | windows_survived=Y
+47A|XAG|REJECT|pace=$629/mo|DD=7.8%|90HO=0|leave=-6410|dLeave=+0|Ext=N/A|legal=True
+47B|US100|REJECT|pace=$224/mo|DD=0.2%|90HO=0|leave=1247|dLeave=+7657|Ext=N/A|legal=True
+47C|JOINT|CONDITIONAL|pace=$856/mo|DD=7.7%|90HO=14|leave=-5228|dLeave=+1182|Ext=N/A|legal=True
+47D|JOINT|CONDITIONAL|pace=$1186/mo|DD=7.2%|90HO=14|leave=-2807|dLeave=+3603|Ext=N/A|legal=True
+47E|JOINT|CONDITIONAL|pace=$1429/mo|DD=6.9%|90HO=15|leave=-1096|dLeave=+5314|Ext=N/A|legal=True
