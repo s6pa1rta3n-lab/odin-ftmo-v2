@@ -1,0 +1,163 @@
+[
+  {
+    "label": "ungov 2.50%",
+    "book": "36A",
+    "symbol": "AUS200",
+    "use_gov": false,
+    "full_risk": 0.025,
+    "mid_risk": 0.0125,
+    "floor_risk": 0.0075,
+    "n_trades": 50,
+    "wins": 19,
+    "wr": 0.38,
+    "longs": 33,
+    "shorts": 17,
+    "reasons": {
+      "TIME": 25,
+      "TP": 8,
+      "SL": 17
+    },
+    "gov_counts": {
+      "n/a": 50
+    },
+    "by_sym": {
+      "AUS200": 50
+    },
+    "ho_net": -6163.00450600002,
+    "ho_pace": -629.5364334316799,
+    "fit_net": -17194.913955999964,
+    "leave_drop": [
+      "2025-11",
+      "2026-07"
+    ],
+    "leave_net": -12189.331584000012,
+    "leave_ok": false,
+    "ext_net": 0.0,
+    "ext_status": "UNAVAILABLE (feeds end 2026-09-01; no dukas-ext)",
+    "ext_available": false,
+    "max_dd": 0.27126549807226386,
+    "worst_day": "2025-12-18",
+    "worst_pct": -0.025302683743453,
+    "n_fail_days": 0,
+    "legal": false,
+    "n60": 0,
+    "w60": 874,
+    "n90": 0,
+    "w90": 844,
+    "p90": [],
+    "n90_ho": 0,
+    "nseq": 0,
+    "wseq": 844,
+    "pseq": [],
+    "nseq_ho": 0,
+    "has_90": false,
+    "has_90_ho": false,
+    "decision": "REJECT",
+    "final_equity": 76642.081538,
+    "meta": {
+      "funnel": {
+        "no_break": 419,
+        "signals": 50,
+        "ignored_in_pos": 44,
+        "no_next": 1
+      },
+      "final_equity": 76642.081538,
+      "peak_equity": 103528.067084,
+      "killed_days": 0,
+      "n_daily": 818,
+      "unfinished": 0,
+      "chassis": "aus200-donchian-20d-dual-1r",
+      "taken": 50,
+      "use_gov": false,
+      "full_risk": 0.025,
+      "mid_risk": 0.0125,
+      "floor_risk": 0.0075,
+      "spread": 1.5,
+      "contract": 1.0,
+      "symbol": "AUS200"
+    }
+  },
+  {
+    "label": "soft 2.50\u21921.25\u21920.75",
+    "book": "36B",
+    "symbol": "AUS200",
+    "use_gov": true,
+    "full_risk": 0.025,
+    "mid_risk": 0.0125,
+    "floor_risk": 0.0075,
+    "n_trades": 50,
+    "wins": 19,
+    "wr": 0.38,
+    "longs": 33,
+    "shorts": 17,
+    "reasons": {
+      "TIME": 25,
+      "TP": 8,
+      "SL": 17
+    },
+    "gov_counts": {
+      "full": 9,
+      "mid": 1,
+      "floor": 40
+    },
+    "by_sym": {
+      "AUS200": 50
+    },
+    "ho_net": -2033.0833720000066,
+    "ho_pace": -207.6746907506047,
+    "fit_net": -8512.856219999992,
+    "leave_drop": [
+      "2025-11",
+      "2026-07"
+    ],
+    "leave_net": -4060.8891400000043,
+    "leave_ok": false,
+    "ext_net": 0.0,
+    "ext_status": "UNAVAILABLE (feeds end 2026-09-01; no dukas-ext)",
+    "ext_available": false,
+    "max_dd": 0.14008706377404587,
+    "worst_day": "2024-07-20",
+    "worst_pct": -0.02528243260254439,
+    "n_fail_days": 0,
+    "legal": false,
+    "n60": 0,
+    "w60": 874,
+    "n90": 0,
+    "w90": 844,
+    "p90": [],
+    "n90_ho": 0,
+    "nseq": 0,
+    "wseq": 844,
+    "pseq": [],
+    "nseq_ho": 0,
+    "has_90": false,
+    "has_90_ho": false,
+    "decision": "REJECT",
+    "final_equity": 89454.06040799999,
+    "meta": {
+      "funnel": {
+        "no_break": 419,
+        "signals": 50,
+        "gov_full": 9,
+        "ignored_in_pos": 44,
+        "gov_mid": 1,
+        "gov_floor": 40,
+        "no_next": 1
+      },
+      "final_equity": 89454.06040799999,
+      "peak_equity": 103528.067084,
+      "killed_days": 0,
+      "n_daily": 818,
+      "unfinished": 0,
+      "chassis": "aus200-donchian-20d-dual-1r+softgov",
+      "taken": 50,
+      "use_gov": true,
+      "full_risk": 0.025,
+      "mid_risk": 0.0125,
+      "floor_risk": 0.0075,
+      "spread": 1.5,
+      "contract": 1.0,
+      "symbol": "AUS200"
+    }
+  }
+]
