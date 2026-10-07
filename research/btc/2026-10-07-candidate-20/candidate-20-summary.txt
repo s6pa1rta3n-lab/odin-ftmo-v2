@@ -1,0 +1,7 @@
+**CONDITIONAL (thin) — BTC H4-BREAK-6 channel + governor is the only legal ≤90d path:** max DD **8.0%**, ≤90d cont **77/916**, seq **13/536**. BUT **HO net = $0** and **Ext = $0** — governor sticky-blocked after Fit; all counted windows sit in Fit (2024). XAG Donchian+gov kills every window. C17 R15+gov: legal DD, still 0 windows. **Not ACCEPT. Not deployable as a live 1–3mo start.**
+20A|gov=False|REJECT|pace=$867/mo|DD=12.4%|90d=77/838|seq=60/838|legal=False
+20A|gov=True|REJECT|pace=$0/mo|DD=8.5%|90d=0/827|seq=0/322|legal=True
+20B|gov=False|REJECT|pace=$2070/mo|DD=13.8%|90d=129/917|seq=13/917|legal=False
+20B|gov=True|CONDITIONAL|pace=$0/mo|DD=8.0%|90d=77/916|seq=13/536|legal=True
+20C|gov=False|REJECT|pace=$669/mo|DD=12.0%|90d=0/917|seq=0/917|legal=False
+20C|gov=True|REJECT|pace=$0/mo|DD=8.2%|90d=0/917|seq=0/155|legal=True
