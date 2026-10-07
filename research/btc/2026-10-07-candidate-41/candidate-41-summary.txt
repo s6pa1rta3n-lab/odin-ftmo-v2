@@ -1,0 +1,7 @@
+**NO — US100 NR7 + BTC C15 soft joint (no XAG) does not open a deployable ~3mo path.** DD illegal, HO≤0, or zero ≤90d windows.
+
+WINDOW_CREATION|41A HO≤90d=0 | 41B HO≤90d=0 → 41D joint HO≤90d=0 (seq HO 0+0→0)
+41A|US100|gov=True|REJECT|pace=$1931/mo|DD=1.0%|90d=0/732(HO=0)|seq=0/732(HO=0)|legal=True|leave=10588|xcheck_out=0/0 best=8.20896311077519
+41B|BTC|gov=True|REJECT|pace=$1253/mo|DD=6.8%|90d=0/879(HO=0)|seq=0/879(HO=0)|legal=True|leave=2917|xcheck_out=0/0 best=6.816463414954943
+41C|JOINT|gov=False|REJECT|pace=$3820/mo|DD=5.2%|90d=0/879(HO=0)|seq=0/879(HO=0)|legal=True|leave=19250|xcheck_out=0/0 best=12.63071552085151
+41D|JOINT|gov=True|REJECT|pace=$3766/mo|DD=5.2%|90d=0/879(HO=0)|seq=0/879(HO=0)|legal=True|leave=18963|xcheck_out=0/0 best=12.63071552085151
