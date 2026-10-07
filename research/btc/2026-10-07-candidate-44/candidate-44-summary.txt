@@ -1,0 +1,7 @@
+**CONDITIONAL — XAG soft + BTC fixed satellite legal/windows, not ACCEPT** via 44C: max DD 9.6%, HO≤90d 6, HO ~$1,266/mo, leave $-2,492 (Δ vs 44A +4,483). Leave-out still blocks ACCEPT.
+
+XAG_WINDOW_SURVIVAL|44A HO≤90d=8 leave=-6976 → 44C HO≤90d=6 DD=9.6% leave=-2492 (Δ+4483) | 44D HO≤90d=8 DD=9.1% leave=-5271 (Δ+1705) | windows_survived=Y
+44A|XAG|CONDITIONAL|pace=$847/mo|DD=9.4%|90HO=8|leave=-6976|dLeave=+0|legal=True
+44B|BTC|REJECT|pace=$330/mo|DD=2.0%|90HO=0|leave=836|dLeave=+7811|legal=True
+44C|JOINT|CONDITIONAL|pace=$1266/mo|DD=9.6%|90HO=6|leave=-2492|dLeave=+4483|legal=True
+44D|JOINT|CONDITIONAL|pace=$878/mo|DD=9.1%|90HO=8|leave=-5271|dLeave=+1705|legal=True
