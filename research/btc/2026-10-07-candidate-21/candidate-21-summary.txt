@@ -1,0 +1,5 @@
+**CONDITIONAL (not deployable) — soft DD governor does NOT open a 1–3mo ACCEPT path.** BTC H4 channel soft (1.00→0.50→0.25): max DD **9.6%** legal, HO ~**$310/mo** (sticky was $0), Ext **−$2.6k**, leave-out fail, ≤90d **77/917** but **HO-era 0** (Fit 2024 only) → same Fit-window trap as C20. XAG Donchian soft (2.50→1.25→0.75): DD **9.4%** legal, HO ~**$847/mo**, ≤90d **48/838** with **8 HO-era**, but leave-out remaining HO **negative** → CONDITIONAL, not ACCEPT. Vs C20 sticky: soft restores HO trading; still no deployable pass.
+21B|gov=False|REJECT|pace=$867/mo|DD=12.4%|90d=77/838(HO=0)|seq=60/838(HO=0)|legal=False
+21B|gov=True|CONDITIONAL|pace=$847/mo|DD=9.4%|90d=48/838(HO=8)|seq=60/838(HO=0)|legal=True|leave_out=FAIL
+21A|gov=False|REJECT|pace=$2070/mo|DD=13.8%|90d=129/917(HO=0)|seq=13/917(HO=0)|legal=False
+21A|gov=True|CONDITIONAL|pace=$310/mo|DD=9.6%|90d=77/917(HO=0)|seq=13/917(HO=0)|legal=True|Ext=red|leave_out=FAIL
