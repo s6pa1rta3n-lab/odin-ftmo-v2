@@ -7,7 +7,7 @@ Operations record for the Candidate 4 book and the parallel freeze of the live c
 | Document | What it is |
 | --- | --- |
 | [evidence/2026-10-07-drip-freeze-and-c4-arm.md](evidence/2026-10-07-drip-freeze-and-c4-arm.md) | FINAL record: drip freeze proof, C4 book facts, pre-flight 12/12, live min-size ticket, armed-for, deviations, authorization trail |
-| [unit/c4-sma50-r1.service](unit/c4-sma50-r1.service) | Verbatim snapshot of the live unit file from the book path (for the record; do not install from here) |
+| [unit/c4-sma50-r1.service](unit/c4-sma50-r1.service) | Snapshot of the live unit file from the book path, matching the Ops-verified live `C4_ARMED=1` (for the record; do not install from here) |
 | [source/C4-OPS-STATUS.md](source/C4-OPS-STATUS.md) | Trading Ops FINAL status (~8:33 AM ET), verbatim |
 | [source/C4-IMPLEMENTATION-CHECKLIST.md](source/C4-IMPLEMENTATION-CHECKLIST.md) | Blocking pre-flight / implementation checklist, verbatim |
 | [source/DEPLOY-TODAY-C4.md](source/DEPLOY-TODAY-C4.md) | Deploy-today brief (CONDITIONAL research status), verbatim |
@@ -18,7 +18,7 @@ Operations record for the Candidate 4 book and the parallel freeze of the live c
 |---|---|
 | Book path | `/home/solveetcoagula/ftmo-c4/` |
 | Engine | `c4_sma50_r1.py` |
-| Service | `c4-sma50-r1.service` (enabled, active) |
+| Service | `c4-sma50-r1.service` (enabled, active, `C4_ARMED=1`) |
 | Order comment | `C4_SMA50_R1` |
 | Account | MetaAPI `a60dfd98-8a34-4c1b-9f2c-b40cdcc2c3bf` (shared with the catalogue drip by design; comments segregate books) |
 | Symbol / volume | BTCUSD / 0.01 |

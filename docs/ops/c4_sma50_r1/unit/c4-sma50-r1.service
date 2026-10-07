@@ -1,3 +1,8 @@
+# Record-only snapshot of the live unit on matt-berserker. Do not install from this repository.
+# Live state verified by Trading Ops 2026-10-07 (systemctl show): Environment=C4_ARMED=1,
+# service active + enabled. An earlier pre-arm capture carried C4_ARMED=0; this file
+# reflects the armed live unit.
+
 [Unit]
 Description=Candidate 4 BTCUSD SMA50 R=1 (C4_SMA50_R1) — armed only when C4_ARMED=1
 After=network-online.target
@@ -7,7 +12,7 @@ Wants=network-online.target
 Type=simple
 User=solveetcoagula
 WorkingDirectory=/home/solveetcoagula/ftmo-c4
-Environment=C4_ARMED=0
+Environment=C4_ARMED=1
 Environment=C4_KILL=0
 Environment=C4_VOLUME=0.01
 Environment=C4_INITIAL_EQUITY=100000

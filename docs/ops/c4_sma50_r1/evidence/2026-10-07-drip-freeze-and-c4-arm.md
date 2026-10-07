@@ -63,7 +63,7 @@ C4 is a new, separate book, not an edit of `btc_15m_buy.py` or `catalogue-btc-15
 |---|---|
 | Path | `/home/solveetcoagula/ftmo-c4/` |
 | Engine | `c4_sma50_r1.py` |
-| Service | `c4-sma50-r1.service` — **enabled, active** |
+| Service | `c4-sma50-r1.service` — **enabled, active**, `C4_ARMED=1` (verified via `systemctl show`) |
 | Order comment | `C4_SMA50_R1` |
 | Account | MetaAPI `a60dfd98-8a34-4c1b-9f2c-b40cdcc2c3bf` — **same account as the drip, intentional**; order comments segregate the books (`C4_SMA50_R1` vs `CATALOGUE_BTC_15M`) |
 | Symbol | BTCUSD |
@@ -86,9 +86,9 @@ Start log (from the ops status):
 
 ### Unit file snapshot
 
-[`../unit/c4-sma50-r1.service`](../unit/c4-sma50-r1.service) is the verbatim snapshot taken from the live book path. It is kept here **for the record only** — do not install it from this repository.
+[`../unit/c4-sma50-r1.service`](../unit/c4-sma50-r1.service) is the snapshot of the live unit from the book path. It is kept here **for the record only** — do not install it from this repository.
 
-Observation for the reviewer: the snapshot carries `Environment=C4_ARMED=0`, while the 8:33:50 AM ET start log reports `"armed":true` and the status header says ARMED. The attached sources do not state how the armed state was applied relative to the snapshot (e.g. unit edited after the snapshot, or an override). This record does not guess; confirm with Trading Ops if the exact arming mechanism matters.
+Live armed state, verified by Trading Ops on 2026-10-07: `systemctl show` reports `Environment=C4_ARMED=1`; the service is **active + enabled**; the 8:33:50 AM ET start log reports `"armed":true` and `wait_slot` `2026-10-08T00:00:00Z`. An earlier capture of the unit carried `C4_ARMED=0`; that was a stale pre-arm snapshot. The checked-in unit file reflects the live `C4_ARMED=1`.
 
 ---
 
@@ -124,7 +124,7 @@ Observation for the reviewer: the snapshot carries `Environment=C4_ARMED=0`, whi
 | Result | **PASS** (`sl_ok` + `tp_ok`) — fill, SL and TP verified on the broker, then **closed** after verification |
 | Remaining C4 positions | **none** |
 
-Arithmetic note for the reviewer: the reported SL and TP are exactly symmetric at ±412.91 around **83524.99** (83524.99 − 412.91 = 83112.08; 83524.99 + 412.91 = 83937.90), while the reported open is 83524.2, i.e. 0.79 below that reference. The attached sources do not state which price the SL/TP were computed from; they report the ticket as PASS (`sl_ok` + `tp_ok`) on both sides. Recorded as-is.
+Precision note (verified by Trading Ops): the broker fill `openPrice` is 83524.2, while SL/TP are ±412.91 around ~83524.99, the quote used for the protect levels before/around the fill. Fill price vs protect-level mid differing by well under a point is normal market + modify rounding, not a conflict.
 
 ---
 
@@ -177,3 +177,4 @@ Risk rules carried from the brief (section B of the checklist): no new entries i
 | 8:30:04 AM | Trading Ops | Slot proof `skip_freeze_new_buys` |
 | ~8:33 AM | Trading Ops | C4 pre-flight 12/12 PASS, live min-size ticket 173729950 verified and closed, `c4-sma50-r1.service` armed; FINAL status written |
 | ~8:46 AM | Odin via Trading Ops | Strategy Implementer to record the above in this repository as a **docs-only** PR; no live service, VM path, or trading-code change |
+| ~8:52 AM | Trading Ops | Verified live `C4_ARMED=1` (`systemctl show`), service active + enabled; confirmed min-ticket fill vs protect-level mid is normal market + modify rounding; docs corrected accordingly |
