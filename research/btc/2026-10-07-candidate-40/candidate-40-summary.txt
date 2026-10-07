@@ -1,0 +1,4 @@
+**NO — GER40 Keltner55 does not open a deployable ~3mo path.** DD illegal, HO≤0, or zero ≤90d windows.
+
+40A|GER40|gov=False|REJECT|pace=$-724/mo|DD=13.8%|90d=0/857(HO=0)|seq=0/857(HO=0)|legal=False|leave=-11033|xcheck_out=0/0 best=9.018664390632392
+40B|GER40|gov=True|REJECT|pace=$-399/mo|DD=9.8%|90d=0/857(HO=0)|seq=0/857(HO=0)|legal=True|leave=-4879|xcheck_out=0/0 best=9.018664390632392
