@@ -1,0 +1,5 @@
+**NO cleared ACCEPT — XAG 19A is DD-legal at ~$766/mo but too slow / no ≤90d windows (Ext UNAVAILABLE — XAG feed ends 2026-09-01; no dukas-ext).**
+19A@0.75% REJECT pace=$564/mo DD=5.8% 90d=0/843 seq=0/843 legal=True
+19A@0.50% REJECT pace=$374/mo DD=3.9% 90d=0/843 seq=0/843 legal=True
+19A@1.00% REJECT pace=$766/mo DD=7.7% 90d=0/843 seq=0/843 legal=True
+19B@2.50% REJECT pace=$867/mo DD=12.4% 90d=77/838 seq=60/838 legal=False
