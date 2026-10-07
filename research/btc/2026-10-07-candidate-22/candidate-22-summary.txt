@@ -1,0 +1,7 @@
+**CONDITIONAL — index Donchian+softgov legal DD + windows, not ACCEPT** via 22A (soft 2.50→1.25→0.75): max DD 9.4%, ≤90d 7/842 (HO-era 0), seq HO-era 0, HO ~$-268/mo. Fit-only / leave-out / Ext weak → not deployable.
+22A|GER40|gov=False|REJECT|pace=$-629/mo|DD=11.8%|90d=7/842(HO=0)|seq=7/842(HO=0)|legal=False
+22A|GER40|gov=True|CONDITIONAL|pace=$-268/mo|DD=9.4%|90d=7/842(HO=0)|seq=7/842(HO=0)|legal=True
+22B|USA30|gov=False|REJECT|pace=$-200/mo|DD=19.3%|90d=0/843(HO=0)|seq=0/843(HO=0)|legal=False
+22B|USA30|gov=True|REJECT|pace=$-54/mo|DD=11.8%|90d=0/843(HO=0)|seq=0/843(HO=0)|legal=False
+22C|JOINT|gov=False|REJECT|pace=$-21/mo|DD=7.2%|90d=0/842(HO=0)|seq=0/842(HO=0)|legal=True
+22C|JOINT|gov=True|REJECT|pace=$-193/mo|DD=6.6%|90d=0/842(HO=0)|seq=0/842(HO=0)|legal=True

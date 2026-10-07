@@ -1,0 +1,671 @@
+[
+  {
+    "label": "ungov 2.50%",
+    "book": "22A",
+    "symbol": "GER40",
+    "use_gov": false,
+    "full_risk": 0.025,
+    "mid_risk": 0.0125,
+    "floor_risk": 0.0075,
+    "n_trades": 51,
+    "wins": 28,
+    "wr": 0.5490196078431373,
+    "longs": 36,
+    "shorts": 15,
+    "reasons": {
+      "TIME": 16,
+      "TP": 21,
+      "SL": 14
+    },
+    "gov_counts": {
+      "n/a": 51
+    },
+    "by_sym": {
+      "GER40": 51
+    },
+    "ho_net": -6160.35641399999,
+    "ho_pace": -629.2659370542272,
+    "fit_net": 21173.989540000002,
+    "leave_drop": [
+      "2026-01",
+      "2026-08"
+    ],
+    "leave_net": -16468.614903999995,
+    "leave_ok": false,
+    "ext_net": 0.0,
+    "ext_status": "UNAVAILABLE (index feeds end 2026-09-01; no dukas-ext)",
+    "ext_available": false,
+    "max_dd": 0.11821145673548682,
+    "worst_day": "2024-04-04",
+    "worst_pct": -0.025191357226275666,
+    "n_fail_days": 0,
+    "legal": false,
+    "n60": 0,
+    "w60": 872,
+    "n90": 7,
+    "w90": 842,
+    "p90": [
+      {
+        "start": "2024-02-17",
+        "end": "2024-05-16",
+        "start_eq": 100317.12800000001,
+        "max_mult": 1.1573494291024764,
+        "min_mult": 1.0248102573271436,
+        "worst_day": -0.025191357226275666
+      },
+      {
+        "start": "2024-02-18",
+        "end": "2024-05-17",
+        "start_eq": 100317.12800000001,
+        "max_mult": 1.1573494291024764,
+        "min_mult": 1.0248102573271436,
+        "worst_day": -0.025191357226275666
+      },
+      {
+        "start": "2024-02-19",
+        "end": "2024-05-18",
+        "start_eq": 100317.12800000001,
+        "max_mult": 1.1573494291024764,
+        "min_mult": 1.0248102573271436,
+        "worst_day": -0.025191357226275666
+      },
+      {
+        "start": "2024-02-20",
+        "end": "2024-05-19",
+        "start_eq": 100317.12800000001,
+        "max_mult": 1.1573494291024764,
+        "min_mult": 1.0248102573271436,
+        "worst_day": -0.025191357226275666
+      },
+      {
+        "start": "2024-02-21",
+        "end": "2024-05-20",
+        "start_eq": 100317.12800000001,
+        "max_mult": 1.1573494291024764,
+        "min_mult": 1.0248102573271436,
+        "worst_day": -0.025191357226275666
+      },
+      {
+        "start": "2024-02-22",
+        "end": "2024-05-21",
+        "start_eq": 100317.12800000001,
+        "max_mult": 1.1573494291024764,
+        "min_mult": 1.0248102573271436,
+        "worst_day": -0.025191357226275666
+      },
+      {
+        "start": "2024-02-23",
+        "end": "2024-05-22",
+        "start_eq": 100317.12800000001,
+        "max_mult": 1.1573494291024764,
+        "min_mult": 1.0248102573271436,
+        "worst_day": -0.025191357226275666
+      }
+    ],
+    "n90_ho": 0,
+    "nseq": 7,
+    "wseq": 842,
+    "pseq": [
+      {
+        "start": "2024-02-17",
+        "challenge_done": "2024-03-28",
+        "verification_done": "2024-05-16",
+        "total_days": 90
+      },
+      {
+        "start": "2024-02-18",
+        "challenge_done": "2024-03-28",
+        "verification_done": "2024-05-16",
+        "total_days": 89
+      },
+      {
+        "start": "2024-02-19",
+        "challenge_done": "2024-03-28",
+        "verification_done": "2024-05-16",
+        "total_days": 88
+      },
+      {
+        "start": "2024-02-20",
+        "challenge_done": "2024-03-28",
+        "verification_done": "2024-05-16",
+        "total_days": 87
+      },
+      {
+        "start": "2024-02-21",
+        "challenge_done": "2024-03-28",
+        "verification_done": "2024-05-16",
+        "total_days": 86
+      },
+      {
+        "start": "2024-02-22",
+        "challenge_done": "2024-03-28",
+        "verification_done": "2024-05-16",
+        "total_days": 85
+      },
+      {
+        "start": "2024-02-23",
+        "challenge_done": "2024-03-28",
+        "verification_done": "2024-05-16",
+        "total_days": 84
+      }
+    ],
+    "nseq_ho": 0,
+    "has_90": true,
+    "has_90_ho": false,
+    "decision": "REJECT",
+    "final_equity": 115013.63312600004,
+    "meta": {
+      "funnel": {
+        "no_break": 467,
+        "signals": 51,
+        "ignored_in_pos": 48,
+        "no_next": 1
+      },
+      "final_equity": 115013.63312600004,
+      "peak_equity": 128744.40092600007,
+      "killed_days": 0,
+      "n_daily": 822,
+      "unfinished": 0,
+      "chassis": "ger40-donchian-20d-dual-1r",
+      "taken": 51,
+      "use_gov": false,
+      "full_risk": 0.025,
+      "mid_risk": 0.0125,
+      "floor_risk": 0.0075,
+      "spread": 2.0,
+      "symbol": "GER40"
+    }
+  },
+  {
+    "label": "soft 2.50\u21921.25\u21920.75",
+    "book": "22A",
+    "symbol": "GER40",
+    "use_gov": true,
+    "full_risk": 0.025,
+    "mid_risk": 0.0125,
+    "floor_risk": 0.0075,
+    "n_trades": 51,
+    "wins": 28,
+    "wr": 0.5490196078431373,
+    "longs": 36,
+    "shorts": 15,
+    "reasons": {
+      "TIME": 16,
+      "TP": 21,
+      "SL": 14
+    },
+    "gov_counts": {
+      "full": 36,
+      "mid": 9,
+      "floor": 6
+    },
+    "by_sym": {
+      "GER40": 51
+    },
+    "ho_net": -2619.7502719999975,
+    "ho_pace": -267.60133650899303,
+    "fit_net": 18245.873920000013,
+    "leave_drop": [
+      "2026-01",
+      "2026-04"
+    ],
+    "leave_net": -6473.85034,
+    "leave_ok": false,
+    "ext_net": 0.0,
+    "ext_status": "UNAVAILABLE (index feeds end 2026-09-01; no dukas-ext)",
+    "ext_available": false,
+    "max_dd": 0.09438257371400749,
+    "worst_day": "2024-04-04",
+    "worst_pct": -0.025191357226275666,
+    "n_fail_days": 0,
+    "legal": true,
+    "n60": 0,
+    "w60": 872,
+    "n90": 7,
+    "w90": 842,
+    "p90": [
+      {
+        "start": "2024-02-17",
+        "end": "2024-05-16",
+        "start_eq": 100317.12800000001,
+        "max_mult": 1.1573494291024764,
+        "min_mult": 1.0248102573271436,
+        "worst_day": -0.025191357226275666
+      },
+      {
+        "start": "2024-02-18",
+        "end": "2024-05-17",
+        "start_eq": 100317.12800000001,
+        "max_mult": 1.1573494291024764,
+        "min_mult": 1.0248102573271436,
+        "worst_day": -0.025191357226275666
+      },
+      {
+        "start": "2024-02-19",
+        "end": "2024-05-18",
+        "start_eq": 100317.12800000001,
+        "max_mult": 1.1573494291024764,
+        "min_mult": 1.0248102573271436,
+        "worst_day": -0.025191357226275666
+      },
+      {
+        "start": "2024-02-20",
+        "end": "2024-05-19",
+        "start_eq": 100317.12800000001,
+        "max_mult": 1.1573494291024764,
+        "min_mult": 1.0248102573271436,
+        "worst_day": -0.025191357226275666
+      },
+      {
+        "start": "2024-02-21",
+        "end": "2024-05-20",
+        "start_eq": 100317.12800000001,
+        "max_mult": 1.1573494291024764,
+        "min_mult": 1.0248102573271436,
+        "worst_day": -0.025191357226275666
+      },
+      {
+        "start": "2024-02-22",
+        "end": "2024-05-21",
+        "start_eq": 100317.12800000001,
+        "max_mult": 1.1573494291024764,
+        "min_mult": 1.0248102573271436,
+        "worst_day": -0.025191357226275666
+      },
+      {
+        "start": "2024-02-23",
+        "end": "2024-05-22",
+        "start_eq": 100317.12800000001,
+        "max_mult": 1.1573494291024764,
+        "min_mult": 1.0248102573271436,
+        "worst_day": -0.025191357226275666
+      }
+    ],
+    "n90_ho": 0,
+    "nseq": 7,
+    "wseq": 842,
+    "pseq": [
+      {
+        "start": "2024-02-17",
+        "challenge_done": "2024-03-28",
+        "verification_done": "2024-05-16",
+        "total_days": 90
+      },
+      {
+        "start": "2024-02-18",
+        "challenge_done": "2024-03-28",
+        "verification_done": "2024-05-16",
+        "total_days": 89
+      },
+      {
+        "start": "2024-02-19",
+        "challenge_done": "2024-03-28",
+        "verification_done": "2024-05-16",
+        "total_days": 88
+      },
+      {
+        "start": "2024-02-20",
+        "challenge_done": "2024-03-28",
+        "verification_done": "2024-05-16",
+        "total_days": 87
+      },
+      {
+        "start": "2024-02-21",
+        "challenge_done": "2024-03-28",
+        "verification_done": "2024-05-16",
+        "total_days": 86
+      },
+      {
+        "start": "2024-02-22",
+        "challenge_done": "2024-03-28",
+        "verification_done": "2024-05-16",
+        "total_days": 85
+      },
+      {
+        "start": "2024-02-23",
+        "challenge_done": "2024-03-28",
+        "verification_done": "2024-05-16",
+        "total_days": 84
+      }
+    ],
+    "nseq_ho": 0,
+    "has_90": true,
+    "has_90_ho": false,
+    "decision": "CONDITIONAL",
+    "final_equity": 115626.12364800005,
+    "meta": {
+      "funnel": {
+        "no_break": 467,
+        "signals": 51,
+        "gov_full": 36,
+        "ignored_in_pos": 48,
+        "gov_mid": 9,
+        "gov_floor": 6,
+        "no_next": 1
+      },
+      "final_equity": 115626.12364800005,
+      "peak_equity": 127174.73459000007,
+      "killed_days": 0,
+      "n_daily": 822,
+      "unfinished": 0,
+      "chassis": "ger40-donchian-20d-dual-1r+softgov",
+      "taken": 51,
+      "use_gov": true,
+      "full_risk": 0.025,
+      "mid_risk": 0.0125,
+      "floor_risk": 0.0075,
+      "spread": 2.0,
+      "symbol": "GER40"
+    }
+  },
+  {
+    "label": "ungov 2.50%",
+    "book": "22B",
+    "symbol": "USA30",
+    "use_gov": false,
+    "full_risk": 0.025,
+    "mid_risk": 0.0125,
+    "floor_risk": 0.0075,
+    "n_trades": 55,
+    "wins": 23,
+    "wr": 0.41818181818181815,
+    "longs": 36,
+    "shorts": 19,
+    "reasons": {
+      "TP": 16,
+      "SL": 18,
+      "TIME": 21
+    },
+    "gov_counts": {
+      "n/a": 55
+    },
+    "by_sym": {
+      "USA30": 55
+    },
+    "ho_net": -1960.9334599999952,
+    "ho_pace": -200.3047467194626,
+    "fit_net": -7374.136454000028,
+    "leave_drop": [
+      "2026-03",
+      "2026-01"
+    ],
+    "leave_net": -8520.961392000005,
+    "leave_ok": false,
+    "ext_net": 0.0,
+    "ext_status": "UNAVAILABLE (index feeds end 2026-09-01; no dukas-ext)",
+    "ext_available": false,
+    "max_dd": 0.19284555842585108,
+    "worst_day": "2024-06-04",
+    "worst_pct": -0.02512936887184591,
+    "n_fail_days": 0,
+    "legal": false,
+    "n60": 0,
+    "w60": 873,
+    "n90": 0,
+    "w90": 843,
+    "p90": [],
+    "n90_ho": 0,
+    "nseq": 0,
+    "wseq": 843,
+    "pseq": [],
+    "nseq_ho": 0,
+    "has_90": false,
+    "has_90_ho": false,
+    "decision": "REJECT",
+    "final_equity": 90664.930086,
+    "meta": {
+      "funnel": {
+        "no_break": 432,
+        "signals": 55,
+        "ignored_in_pos": 54
+      },
+      "final_equity": 90664.930086,
+      "peak_equity": 106348.32934399998,
+      "killed_days": 0,
+      "n_daily": 833,
+      "unfinished": 0,
+      "chassis": "usa30-donchian-20d-dual-1r",
+      "taken": 55,
+      "use_gov": false,
+      "full_risk": 0.025,
+      "mid_risk": 0.0125,
+      "floor_risk": 0.0075,
+      "spread": 2.5,
+      "symbol": "USA30"
+    }
+  },
+  {
+    "label": "soft 2.50\u21921.25\u21920.75",
+    "book": "22B",
+    "symbol": "USA30",
+    "use_gov": true,
+    "full_risk": 0.025,
+    "mid_risk": 0.0125,
+    "floor_risk": 0.0075,
+    "n_trades": 55,
+    "wins": 23,
+    "wr": 0.41818181818181815,
+    "longs": 36,
+    "shorts": 19,
+    "reasons": {
+      "TP": 16,
+      "SL": 18,
+      "TIME": 21
+    },
+    "gov_counts": {
+      "full": 21,
+      "mid": 13,
+      "floor": 21
+    },
+    "by_sym": {
+      "USA30": 55
+    },
+    "ho_net": -525.7172179999981,
+    "ho_pace": -53.700778912483024,
+    "fit_net": -4415.000412000034,
+    "leave_drop": [
+      "2026-03",
+      "2026-01"
+    ],
+    "leave_net": -2642.6458560000015,
+    "leave_ok": false,
+    "ext_net": 0.0,
+    "ext_status": "UNAVAILABLE (index feeds end 2026-09-01; no dukas-ext)",
+    "ext_available": false,
+    "max_dd": 0.11820903730334578,
+    "worst_day": "2024-06-04",
+    "worst_pct": -0.02512936887184591,
+    "n_fail_days": 0,
+    "legal": false,
+    "n60": 0,
+    "w60": 873,
+    "n90": 0,
+    "w90": 843,
+    "p90": [],
+    "n90_ho": 0,
+    "nseq": 0,
+    "wseq": 843,
+    "pseq": [],
+    "nseq_ho": 0,
+    "has_90": false,
+    "has_90_ho": false,
+    "decision": "REJECT",
+    "final_equity": 95059.28236999997,
+    "meta": {
+      "funnel": {
+        "no_break": 432,
+        "signals": 55,
+        "gov_full": 21,
+        "ignored_in_pos": 54,
+        "gov_mid": 13,
+        "gov_floor": 21
+      },
+      "final_equity": 95059.28236999997,
+      "peak_equity": 105981.60483999999,
+      "killed_days": 0,
+      "n_daily": 833,
+      "unfinished": 0,
+      "chassis": "usa30-donchian-20d-dual-1r+softgov",
+      "taken": 55,
+      "use_gov": true,
+      "full_risk": 0.025,
+      "mid_risk": 0.0125,
+      "floor_risk": 0.0075,
+      "spread": 2.5,
+      "symbol": "USA30"
+    }
+  },
+  {
+    "label": "ungov joint@1.25%",
+    "book": "22C",
+    "symbol": "JOINT",
+    "use_gov": false,
+    "full_risk": 0.0125,
+    "mid_risk": 0.00625,
+    "floor_risk": 0.00375,
+    "n_trades": 69,
+    "wins": 38,
+    "wr": 0.5507246376811594,
+    "longs": 48,
+    "shorts": 21,
+    "reasons": {
+      "TIME": 23,
+      "TP": 27,
+      "SL": 19
+    },
+    "gov_counts": {
+      "n/a": 69
+    },
+    "by_sym": {
+      "GER40": 34,
+      "USA30": 35
+    },
+    "ho_net": -209.0158839999898,
+    "ho_pace": -21.35048157369023,
+    "fit_net": 11146.360847999995,
+    "leave_drop": [
+      "2026-01",
+      "2026-03"
+    ],
+    "leave_net": -7045.238849999992,
+    "leave_ok": false,
+    "ext_net": 0.0,
+    "ext_status": "UNAVAILABLE (index feeds end 2026-09-01; no dukas-ext)",
+    "ext_available": false,
+    "max_dd": 0.0719769058813076,
+    "worst_day": "2024-04-04",
+    "worst_pct": -0.012597852269171301,
+    "n_fail_days": 0,
+    "legal": true,
+    "n60": 0,
+    "w60": 872,
+    "n90": 0,
+    "w90": 842,
+    "p90": [],
+    "n90_ho": 0,
+    "nseq": 0,
+    "wseq": 842,
+    "pseq": [],
+    "nseq_ho": 0,
+    "has_90": false,
+    "has_90_ho": false,
+    "decision": "REJECT",
+    "final_equity": 110937.34496400003,
+    "meta": {
+      "funnel": {
+        "taken": 69,
+        "skip_overlap": 37
+      },
+      "final_equity": 110937.34496400003,
+      "peak_equity": 115508.66623400003,
+      "killed_days": 0,
+      "chassis": "ger40+usa30-donchian-joint-1.25",
+      "taken": 69,
+      "use_gov": false,
+      "full_risk": 0.0125,
+      "mid_risk": 0.00625,
+      "floor_risk": 0.00375,
+      "n_ger_sigs": 51,
+      "n_usa_sigs": 55,
+      "symbol": "JOINT"
+    }
+  },
+  {
+    "label": "soft joint 1.25\u21920.625\u21920.375",
+    "book": "22C",
+    "symbol": "JOINT",
+    "use_gov": true,
+    "full_risk": 0.0125,
+    "mid_risk": 0.00625,
+    "floor_risk": 0.00375,
+    "n_trades": 69,
+    "wins": 38,
+    "wr": 0.5507246376811594,
+    "longs": 48,
+    "shorts": 21,
+    "reasons": {
+      "TIME": 23,
+      "TP": 27,
+      "SL": 19
+    },
+    "gov_counts": {
+      "full": 62,
+      "mid": 7
+    },
+    "by_sym": {
+      "GER40": 34,
+      "USA30": 35
+    },
+    "ho_net": -1886.2114499999911,
+    "ho_pace": -192.6720689194622,
+    "fit_net": 11146.360847999995,
+    "leave_drop": [
+      "2026-03",
+      "2026-01"
+    ],
+    "leave_net": -5966.860235999994,
+    "leave_ok": false,
+    "ext_net": 0.0,
+    "ext_status": "UNAVAILABLE (index feeds end 2026-09-01; no dukas-ext)",
+    "ext_available": false,
+    "max_dd": 0.06608189749621757,
+    "worst_day": "2024-04-04",
+    "worst_pct": -0.012597852269171301,
+    "n_fail_days": 0,
+    "legal": true,
+    "n60": 0,
+    "w60": 872,
+    "n90": 0,
+    "w90": 842,
+    "p90": [],
+    "n90_ho": 0,
+    "nseq": 0,
+    "wseq": 842,
+    "pseq": [],
+    "nseq_ho": 0,
+    "has_90": false,
+    "has_90_ho": false,
+    "decision": "REJECT",
+    "final_equity": 109260.14939800002,
+    "meta": {
+      "funnel": {
+        "gov_full": 62,
+        "taken": 69,
+        "skip_overlap": 37,
+        "gov_mid": 7
+      },
+      "final_equity": 109260.14939800002,
+      "peak_equity": 115508.66623400003,
+      "killed_days": 0,
+      "chassis": "ger40+usa30-donchian-joint-1.25+softgov",
+      "taken": 69,
+      "use_gov": true,
+      "full_risk": 0.0125,
+      "mid_risk": 0.00625,
+      "floor_risk": 0.00375,
+      "n_ger_sigs": 51,
+      "n_usa_sigs": 55,
+      "symbol": "JOINT"
+    }
+  }
+]
