@@ -1,0 +1,3 @@
+**NO — AUS200 Donchian+softgov does not open a deployable ~3mo path.** DD illegal, HO≤0, or zero ≤90d windows.
+36A|AUS200|gov=False|REJECT|pace=$-630/mo|DD=27.1%|90d=0/844(HO=0)|seq=0/844(HO=0)|legal=False|leave=-12189
+36B|AUS200|gov=True|REJECT|pace=$-208/mo|DD=14.0%|90d=0/844(HO=0)|seq=0/844(HO=0)|legal=False|leave=-4061
