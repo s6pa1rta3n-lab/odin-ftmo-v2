@@ -1,0 +1,6 @@
+**NO — US100 NR7 + JPN225 Keltner55 does not open a deployable ~3mo path.** DD illegal, HO≤0, or zero ≤90d windows.
+
+31A|US100|gov=True|REJECT|pace=$1931/mo|DD=1.0%|90d=0/732(HO=0)|seq=0/732(HO=0)|legal=True|leave=10588|xcheck_out=0/0 best=8.20896311077519
+31B|JPN225|gov=True|REJECT|pace=$484/mo|DD=9.3%|90d=0/845(HO=0)|seq=0/845(HO=0)|legal=True|leave=-1438|xcheck_out=0/0 best=10.122251667122018
+31C|JOINT|gov=False|REJECT|pace=$3058/mo|DD=10.1%|90d=0/845(HO=0)|seq=0/845(HO=0)|legal=False|leave=8772|xcheck_out=0/0 best=14.849307386679378
+31D|JOINT|gov=True|REJECT|pace=$2921/mo|DD=8.8%|90d=0/845(HO=0)|seq=0/845(HO=0)|legal=True|leave=8380|xcheck_out=0/0 best=14.850405972462898
