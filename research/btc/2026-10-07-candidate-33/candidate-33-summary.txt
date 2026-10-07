@@ -1,0 +1,7 @@
+**NO — AUDUSD/USDCAD Donchian+softgov does not open a deployable ~3mo path.** DD illegal, HO≤0, or zero ≤90d windows.
+33A|AUDUSD|gov=False|REJECT|pace=$-237/mo|DD=30.8%|90d=0/841(HO=0)|seq=0/840(HO=0)|legal=False
+33A|AUDUSD|gov=True|REJECT|pace=$-77/mo|DD=16.3%|90d=0/841(HO=0)|seq=0/840(HO=0)|legal=False
+33B|USDCAD|gov=False|REJECT|pace=$421/mo|DD=24.8%|90d=0/850(HO=0)|seq=0/850(HO=0)|legal=False
+33B|USDCAD|gov=True|REJECT|pace=$139/mo|DD=13.3%|90d=0/850(HO=0)|seq=0/850(HO=0)|legal=False
+33C|JOINT|gov=False|REJECT|pace=$312/mo|DD=20.9%|90d=0/840(HO=0)|seq=0/840(HO=0)|legal=False
+33C|JOINT|gov=True|REJECT|pace=$101/mo|DD=11.4%|90d=0/840(HO=0)|seq=0/840(HO=0)|legal=False
