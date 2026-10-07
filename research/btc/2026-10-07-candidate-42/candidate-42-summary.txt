@@ -1,0 +1,7 @@
+**NO — XAG Donchian soft + JPN225 Keltner soft joint does not open a deployable ~3mo path.** 42D soft joint keeps 5/8 XAG HO≤90d windows (windows_survived=Y) but max DD 11.1% illegal (>10%); leave-out still FAIL ($-9,176). 42C ungov DD 21.0%. 42A alone remains CONDITIONAL (reconfirm).
+
+XAG_WINDOW_SURVIVAL|42A HO≤90d=8 → 42D joint HO≤90d=5 (seq HO 0→0) | windows_survived=Y
+42A|XAG|gov=True|CONDITIONAL|pace=$847/mo|DD=9.4%|90d=48/838(HO=8)|seq=60/838(HO=0)|legal=True|leave=-6976|xcheck_out=0/1 best=6.435126039242833
+42B|JPN225|gov=True|REJECT|pace=$484/mo|DD=9.3%|90d=0/845(HO=0)|seq=0/845(HO=0)|legal=True|leave=-1438|xcheck_out=0/0 best=10.122251667122018
+42C|JOINT|gov=False|REJECT|pace=$1604/mo|DD=21.0%|90d=134/857(HO=0)|seq=83/857(HO=0)|legal=False|leave=-6084|xcheck_out=0/5 best=10.354059618018052
+42D|JOINT|gov=True|REJECT|pace=$1224/mo|DD=11.1%|90d=71/857(HO=5)|seq=83/857(HO=0)|legal=False|leave=-9176|xcheck_out=0/3 best=10.104582153797859
