@@ -1,0 +1,5 @@
+**NO — ETH Candidate 18 does not open a 1–3mo pass path** on the two locked books.
+18A@0.75% REJECT pace=$-1505/mo DD=13.7% 90d=0/844 seq=0/844 legal=False
+18A@0.50% REJECT pace=$-998/mo DD=9.3% 90d=0/844 seq=0/844 legal=True
+18A@1.00% REJECT pace=$-2020/mo DD=17.9% 90d=0/844 seq=0/844 legal=False
+18B@2.60% REJECT pace=$667/mo DD=14.5% 90d=0/841 seq=0/841 legal=False
