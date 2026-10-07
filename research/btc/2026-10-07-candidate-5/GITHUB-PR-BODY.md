@@ -50,3 +50,5 @@ Research-only Candidate 5 vs C4 gates. **Decision: ACCEPT** (not deployed).
 - [ ] Confirm C4 stays running as-is
 - [ ] Do **not** arm C5 from this PR
 - [ ] Optional: re-run `python3 run_candidate_5.py` on box with Dukas merge if regenerating numbers
+
+**Opened:** https://github.com/s6pa1rta3n-lab/odin-ftmo-v2/pull/37

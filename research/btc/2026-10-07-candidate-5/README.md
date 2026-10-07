@@ -46,3 +46,8 @@ SMA50 exclusive dual R=1 + slope confirm (rising long / falling short) + skip el
 - Diagnostic E-only inside results matches C4b-E (fit −$6,693) — V75 is what cleared fit.
 
 Measured: 2026-10-07 ~08:49 ET.
+
+## GitHub
+
+Draft PR: https://github.com/s6pa1rta3n-lab/odin-ftmo-v2/pull/37
+Branch: `research/btc-candidate-5-2026-10-07`
