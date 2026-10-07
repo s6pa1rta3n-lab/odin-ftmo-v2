@@ -1,0 +1,3 @@
+C24 XAG three-close @2.50% → REJECT | DD=10.89% HO=$1,648/mo 90d=0/859(HO=0) seq=0/861(HO=0) explorer=0/30 outside=0 leave=$4,419 legal=False
+Sensitivity@2.60%: DD=11.26% HO=$1,718/mo outside=0 decision=REJECT
+Live C4 untouched. Research only.

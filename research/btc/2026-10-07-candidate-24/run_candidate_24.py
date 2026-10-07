@@ -1,0 +1,1228 @@
+#!/usr/bin/env python3
+"""Candidate 24: XAG three-close momentum (Gold entry5 port).
+
+Research only. Broad Odin mandate. Strategy Explorer directed.
+Mirror entry5 mechanics on XAGUSD — swap symbol/data/costs only.
+Official risk 2.50%; 2.60% sensitivity readout only.
+No live VM / MetaAPI / C4 / drip / FREEZE. Do not package Gold.
+Do not duplicate BTC Wilder SAR or Gold weekly Donchian.
+"""
+from __future__ import annotations
+
+from collections import defaultdict
+from dataclasses import dataclass
+from datetime import date, datetime, timedelta
+from pathlib import Path
+from zoneinfo import ZoneInfo
+import calendar
+import hashlib
+import heapq
+import importlib.util
+import json
+import shutil
+import sys
+import types
+
+import numpy as np
+import pandas as pd
+
+ET = ZoneInfo("America/New_York")
+PRAGUE = ZoneInfo("Europe/Prague")
+
+XAG_FEED = Path(
+    "/workspace/strategy-explorer/pr36/dukascopy-raw/xagusd-m1-bid-2024-01-01-2026-09-02.csv"
+)
+EXPECTED_SHA = "6970b0a1ef4bea4fc4c4deb6f4730ab78b719bd420c47955bfee72a6aa7afe1c"
+ENTRY5_PREREG = Path("/workspace/gold-strategy/entry5-preregister-2026-10-03.md")
+ENTRY5_PREREG_SHA = "6a76bfa6867839b761ff7bf86be104fd533d600925faf306a587a8b37fb48282"
+SPEC_PATH = Path("/workspace/btc-strategies/ftmo-candidate-24.md")
+
+OUT_DIR = Path("/workspace/btc-strategies")
+PACK = OUT_DIR / "2026-10-07-candidate-24"
+RESULTS = OUT_DIR / "candidate-24-results.md"
+SUMMARY_TXT = OUT_DIR / "candidate-24-summary.txt"
+RESULTS_JSON = OUT_DIR / "candidate-24-results.json"
+ROOT_STATUS = OUT_DIR / "STATUS.md"
+PR_BODY = OUT_DIR / "GITHUB-PR-BODY-C24.md"
+RUNNER = OUT_DIR / "run_candidate_24.py"
+
+START_EQUITY = 100_000.0
+MIN_LOT = 0.01
+MAX_LOT = 100.0
+CONTRACT_SIZE = 5000.0  # FTMO XAG
+SPREAD = 0.025  # ASSUMPTION — C19 parity
+COMMISSION_PER_LOT = 3.0  # ASSUMPTION — C19 / Gold metals parity
+TICK_VALUE = 1.0
+
+RISK_OFFICIAL = 0.025
+RISK_SENSITIVITY = 0.026
+TIME_DAY = 5
+TP_MULT = 2.0
+ATR_MULT = 2.0
+
+DAY_FAIL = -0.05
+CHALLENGE_MULT = 1.10
+BOTH_MULT = 1.155
+FLOOR_MULT = 0.90
+
+HO_START = pd.Timestamp("2025-11-08 00:00:00+00:00")
+HO_END = pd.Timestamp("2026-09-01 23:59:59+00:00")
+EXT_START = pd.Timestamp("2026-09-02 00:00:00+00:00")
+FIT_START = pd.Timestamp("2024-01-01 00:00:00+00:00")
+FIT_END = pd.Timestamp("2025-11-07 23:59:59+00:00")
+
+COMPLETE = [f"{y}-{m:02d}" for y in (2024, 2025) for m in range(1, 13)] + [
+    f"2026-{m:02d}" for m in range(1, 9)
+]
+STREAK = {f"2025-{m:02d}" for m in range(8, 13)} | {"2026-01", "2026-02"}
+
+
+@dataclass
+class Trade:
+    side: str
+    entry_ts: pd.Timestamp
+    entry: float
+    exit_ts: pd.Timestamp
+    exit: float
+    reason: str
+    lots: float
+    stop_dist: float
+    pnl: float
+    equity_after: float
+    book: str
+    atr: float
+    signal_ts: pd.Timestamp
+
+
+def sha256_of(path: Path) -> str:
+    h = hashlib.sha256()
+    with open(path, "rb") as fh:
+        for chunk in iter(lambda: fh.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def prague_day(ts: pd.Timestamp) -> date:
+    return ts.tz_convert(PRAGUE).date()
+
+
+def prague_month(ts: pd.Timestamp) -> str:
+    d = ts.tz_convert(PRAGUE).date()
+    return f"{d.year:04d}-{d.month:02d}"
+
+
+def _install_metaapi_stub() -> None:
+    if "metaapi_cloud_sdk" in sys.modules:
+        return
+
+    class MetaApi:
+        def __init__(self, *a, **k):
+            pass
+
+    class SynchronizationListener:
+        def __init__(self, *a, **k):
+            pass
+
+    class TimeoutException(Exception):
+        pass
+
+    sdk = types.ModuleType("metaapi_cloud_sdk")
+    sdk.MetaApi = MetaApi
+    clients = types.ModuleType("metaapi_cloud_sdk.clients")
+    metaapi = types.ModuleType("metaapi_cloud_sdk.clients.metaapi")
+    syn = types.ModuleType("metaapi_cloud_sdk.clients.metaapi.synchronization_listener")
+    syn.SynchronizationListener = SynchronizationListener
+    timeout_mod = types.ModuleType("metaapi_cloud_sdk.clients.timeout_exception")
+    timeout_mod.TimeoutException = TimeoutException
+    sdk.clients = clients
+    clients.metaapi = metaapi
+    metaapi.synchronization_listener = syn
+    clients.timeout_exception = timeout_mod
+    sys.modules["metaapi_cloud_sdk"] = sdk
+    sys.modules["metaapi_cloud_sdk.clients"] = clients
+    sys.modules["metaapi_cloud_sdk.clients.metaapi"] = metaapi
+    sys.modules["metaapi_cloud_sdk.clients.metaapi.synchronization_listener"] = syn
+    sys.modules["metaapi_cloud_sdk.clients.timeout_exception"] = timeout_mod
+
+
+def load_harness():
+    _install_metaapi_stub()
+    sys.path.insert(0, "/workspace/odin-ftmo-v2")
+    _HARNESS_PATH = Path("/workspace/strategy-explorer/pr36/backtest_2026_10_02_live_rules.py")
+    _spec = importlib.util.spec_from_file_location("backtest_2026_10_02_live_rules", _HARNESS_PATH)
+    H = importlib.util.module_from_spec(_spec)
+    sys.modules["backtest_2026_10_02_live_rules"] = H
+    _spec.loader.exec_module(H)
+    from griff_engine_live import compute_atr_14, compute_true_range
+
+    assert compute_atr_14.__globals__["compute_true_range"] is compute_true_range
+    return H, compute_atr_14
+
+
+def resolve_bar(direction, o, h, l, c, stop, target, day_num):
+    """Same priority as entry5 / Donchian resolve_bar; TIME at day 5."""
+    if direction == "BUY":
+        if o <= stop:
+            return (float(o), "SL_OPEN", "open")
+        if l <= stop and h >= target:
+            return (float(stop), "SL_BOTH", "close")
+        if l <= stop:
+            return (float(stop), "SL", "close")
+        if h >= target:
+            return (float(target), "TP", "close")
+    else:
+        if o >= stop:
+            return (float(o), "SL_OPEN", "open")
+        if h >= stop and l <= target:
+            return (float(stop), "SL_BOTH", "close")
+        if h >= stop:
+            return (float(stop), "SL", "close")
+        if l <= target:
+            return (float(target), "TP", "close")
+    if day_num == TIME_DAY:
+        return (float(c), "TIME", "close")
+    return None
+
+
+def _atr_as_of(compute_atr_14, highs, lows, closes, i: int) -> float:
+    window = [
+        {"high": float(highs[j]), "low": float(lows[j]), "close": float(closes[j])}
+        for j in range(i - 14, i + 1)
+    ]
+    return float(compute_atr_14(window))
+
+
+def generate(daily: pd.DataFrame, compute_atr_14) -> dict:
+    opens = daily["open"].to_numpy(float)
+    highs = daily["high"].to_numpy(float)
+    lows = daily["low"].to_numpy(float)
+    closes = daily["close"].to_numpy(float)
+    index = daily.index
+    n = len(daily)
+    trades, unfinished = [], []
+    funnel = {
+        "signals": 0,
+        "no_next_bar": 0,
+        "atr_not_positive": 0,
+        "ignored_in_position": 0,
+        "no_signal": 0,
+    }
+    pending = position = None
+
+    def evaluate(i: int):
+        if i < 3:
+            return None, "no_signal"
+        c0, c1, c2, c3 = (
+            float(closes[i]),
+            float(closes[i - 1]),
+            float(closes[i - 2]),
+            float(closes[i - 3]),
+        )
+        if c0 > c1 > c2 > c3:
+            direction = "BUY"
+        elif c0 < c1 < c2 < c3:
+            direction = "SELL"
+        else:
+            return None, "no_signal"
+        if i < 14:
+            return None, "atr"
+        atr = _atr_as_of(compute_atr_14, highs, lows, closes, i)
+        if not atr > 0.0:
+            return None, "atr"
+        return {
+            "direction": direction,
+            "atr": atr,
+            "signal_i": i,
+            "signal_close": c0,
+        }, "signal"
+
+    for i in range(n):
+        if pending is not None:
+            if position is not None:
+                raise RuntimeError("pending while in position")
+            entry = float(opens[i])
+            sl_dist = ATR_MULT * float(pending["atr"])
+            if pending["direction"] == "BUY":
+                stop = entry - sl_dist
+                target = entry + TP_MULT * sl_dist
+            else:
+                stop = entry + sl_dist
+                target = entry - TP_MULT * sl_dist
+            position = {
+                "direction": pending["direction"],
+                "entry_time": pd.Timestamp(index[i]),
+                "entry": entry,
+                "sl_initial": float(stop),
+                "tp": float(target),
+                "sl_dist": float(sl_dist),
+                "atr": float(pending["atr"]),
+                "entry_i": i,
+                "signal_i": int(pending["signal_i"]),
+                "signal_bar_time": pd.Timestamp(index[pending["signal_i"]]),
+                "signal_close": float(pending["signal_close"]),
+            }
+            pending = None
+
+        if position is not None:
+            day_num = i - position["entry_i"] + 1
+            if day_num > TIME_DAY:
+                raise RuntimeError("held past day 5")
+            hit = resolve_bar(
+                position["direction"],
+                float(opens[i]),
+                float(highs[i]),
+                float(lows[i]),
+                float(closes[i]),
+                position["sl_initial"],
+                position["tp"],
+                day_num,
+            )
+            if hit is not None:
+                fill, reason, when = hit
+                exit_time = (
+                    pd.Timestamp(index[i])
+                    if when == "open"
+                    else pd.Timestamp(index[i]) + pd.Timedelta(days=1)
+                )
+                if exit_time <= position["entry_time"]:
+                    raise RuntimeError("bad exit clock")
+                trades.append(
+                    {
+                        **position,
+                        "exit_time": exit_time,
+                        "exit": float(fill),
+                        "exit_reason": reason,
+                        "bars_held": int(day_num),
+                        "exit_bar_i": int(i),
+                    }
+                )
+                position = None
+
+        if position is None:
+            sig, kind = evaluate(i)
+            if kind == "no_signal":
+                funnel["no_signal"] += 1
+            elif kind == "atr":
+                funnel["atr_not_positive"] += 1
+            elif i + 1 >= n:
+                funnel["no_next_bar"] += 1
+            else:
+                pending = sig
+                funnel["signals"] += 1
+        else:
+            sig, kind = evaluate(i)
+            if kind == "signal":
+                funnel["ignored_in_position"] += 1
+
+    if position is not None:
+        unfinished.append(
+            {
+                "direction": position["direction"],
+                "entry_time": str(position["entry_time"]),
+                "bars_seen": int(n - position["entry_i"]),
+            }
+        )
+    if pending is not None:
+        raise RuntimeError("pending left")
+    return {"trades": trades, "unfinished": unfinished, "funnel": funnel}
+
+
+def book_raw(trades, *, risk: float, zero_time: bool, FTMO_TZ):
+    """Size and cost trades at fixed risk. Equity updates after exits at/before entry."""
+    ordered = sorted(trades, key=lambda t: t["entry_time"])
+    equity = START_EQUITY
+    open_exits, rows = [], []
+    skipped = 0
+    for seq, tr in enumerate(ordered):
+        while open_exits and open_exits[0][0] <= tr["entry_time"]:
+            _, _, pnl = heapq.heappop(open_exits)
+            equity += pnl
+        lots = round(
+            risk * equity / (tr["sl_dist"] * TICK_VALUE * CONTRACT_SIZE),
+            2,
+        )
+        lots = min(lots, MAX_LOT)
+        if lots < MIN_LOT:
+            skipped += 1
+            continue
+        units = lots * CONTRACT_SIZE
+        sign = 1.0 if tr["direction"] == "BUY" else -1.0
+        if zero_time and tr["exit_reason"] == "TIME":
+            pnl = 0.0
+        else:
+            pnl = (
+                sign * (tr["exit"] - tr["entry"]) * units
+                - SPREAD * units
+                - COMMISSION_PER_LOT * lots
+            )
+        rows.append(
+            {
+                **tr,
+                "seq": seq,
+                "lots": lots,
+                "units": units,
+                "equity_at_entry": equity,
+                "pnl": pnl,
+                "risk": risk,
+            }
+        )
+        heapq.heappush(open_exits, (tr["exit_time"], seq, pnl))
+    while open_exits:
+        _, _, pnl = heapq.heappop(open_exits)
+        equity += pnl
+
+    df = pd.DataFrame(rows)
+    if df.empty:
+        return {
+            "df": df,
+            "skipped": skipped,
+            "final": equity,
+            "months": {},
+            "daily": {},
+            "max_dd": 0.0,
+            "worst_day": None,
+            "trade_objs": [],
+            "day_pnl": {},
+            "day_start_eq": {},
+        }
+    df = df.sort_values(["exit_time", "seq"], kind="mergesort").reset_index(drop=True)
+    df["equity_after"] = START_EQUITY + df["pnl"].cumsum()
+    eq = df["equity_after"].to_numpy(float)
+    peak = np.maximum.accumulate(np.concatenate([[START_EQUITY], eq]))[1:]
+    df["dd"] = (eq - peak) / peak
+    exit_local = pd.DatetimeIndex(df["exit_time"]).tz_convert(FTMO_TZ)
+    df["ftmo_day"] = exit_local.date
+    df["month"] = exit_local.strftime("%Y-%m")
+    daily = df.groupby("ftmo_day", sort=True)["pnl"].sum()
+    daily_eq_end = START_EQUITY + daily.cumsum()
+    daily_eq_start = daily_eq_end.shift(1).fillna(START_EQUITY)
+    daily_ratio = daily / daily_eq_start
+    daily_rows = {
+        d: {
+            "pnl": float(daily.loc[d]),
+            "eq_start": float(daily_eq_start.loc[d]),
+            "ratio": float(daily_ratio.loc[d]),
+            "month": f"{d.year}-{d.month:02d}",
+        }
+        for d in daily.index
+    }
+    worst_key = min(daily_rows, key=lambda d: daily_rows[d]["ratio"]) if daily_rows else None
+    worst_day = {"date": str(worst_key), **daily_rows[worst_key]} if worst_key is not None else None
+    pnl_by_month = df.groupby("month")["pnl"].sum()
+    eq_cursor = START_EQUITY
+    months = {}
+    for ym in COMPLETE:
+        eq_start = eq_cursor
+        pnl = float(pnl_by_month[ym]) if ym in pnl_by_month.index else 0.0
+        eq_cursor = eq_start + pnl
+        months[ym] = {"equity_start": eq_start, "equity_end": eq_cursor, "pnl": pnl}
+
+    # Trade objects + day maps for Fit/HO/Ext / ≤90d gates
+    trade_objs: list[Trade] = []
+    day_pnl: dict[date, float] = defaultdict(float)
+    day_start_eq: dict[date, float] = {}
+    for _, r in df.iterrows():
+        side = "long" if r["direction"] == "BUY" else "short"
+        et = pd.Timestamp(r["entry_time"])
+        xt = pd.Timestamp(r["exit_time"])
+        if et.tzinfo is None:
+            et = et.tz_localize("UTC")
+        if xt.tzinfo is None:
+            xt = xt.tz_localize("UTC")
+        tr = Trade(
+            side=side,
+            entry_ts=et,
+            entry=float(r["entry"]),
+            exit_ts=xt,
+            exit=float(r["exit"]),
+            reason=str(r["exit_reason"]),
+            lots=float(r["lots"]),
+            stop_dist=float(r["sl_dist"]),
+            pnl=float(r["pnl"]),
+            equity_after=float(r["equity_after"]),
+            book=f"24@{risk*100:.2f}%",
+            atr=float(r["atr"]),
+            signal_ts=pd.Timestamp(r["signal_bar_time"]),
+        )
+        trade_objs.append(tr)
+        pd_x = prague_day(xt)
+        if pd_x not in day_start_eq:
+            day_start_eq[pd_x] = float(r["equity_after"]) - float(r["pnl"])
+        day_pnl[pd_x] += float(r["pnl"])
+
+    return {
+        "df": df,
+        "skipped": skipped,
+        "final": float(df["equity_after"].iloc[-1]),
+        "months": months,
+        "daily": daily_rows,
+        "max_dd": float(df["dd"].min()),
+        "worst_day": worst_day,
+        "trade_objs": trade_objs,
+        "day_pnl": dict(day_pnl),
+        "day_start_eq": day_start_eq,
+    }
+
+
+def score_windows(booked):
+    df = booked["df"]
+    months = booked["months"]
+    daily_rows = booked["daily"]
+    windows = []
+    for i in range(len(COMPLETE) - 2):
+        trip = COMPLETE[i : i + 3]
+        start_eq = months[trip[0]]["equity_start"]
+        inside = df[df["month"].isin(trip)] if len(df) else df
+        days = [daily_rows[d] for d in daily_rows if daily_rows[d]["month"] in trip]
+        reached_110 = reached_1155 = False
+        min_eq = max_eq = None
+        terminal_eq = start_eq
+        for _, r in inside.iterrows():
+            ea = float(r["equity_after"])
+            terminal_eq = ea
+            if min_eq is None or ea < min_eq:
+                min_eq = ea
+            if max_eq is None or ea > max_eq:
+                max_eq = ea
+            if (not reached_110) and ea >= start_eq * 1.10:
+                reached_110 = True
+            if (not reached_1155) and ea >= start_eq * 1.155:
+                reached_1155 = True
+        if len(inside) == 0:
+            terminal_eq = max_eq = min_eq = start_eq
+        floor_fail = min_eq is not None and min_eq <= start_eq * 0.90
+        day_fail = any(d["ratio"] <= -0.05 for d in days)
+        worst_day = min((d["ratio"] for d in days), default=0.0)
+        max_dd = 0.0
+        if len(inside):
+            eqs = inside["equity_after"].to_numpy(float)
+            pk = np.maximum.accumulate(np.concatenate([[start_eq], eqs]))[1:]
+            max_dd = float(((eqs - pk) / pk).min())
+        passed = reached_110 and reached_1155 and (not floor_fail) and (not day_fail)
+        inter = set(trip) & STREAK
+        if not inter:
+            overlap = "outside"
+        elif inter == set(trip):
+            overlap = "inside_streak"
+        else:
+            overlap = "partial_overlap"
+        y, m = map(int, trip[2].split("-"))
+        end_day = calendar.monthrange(y, m)[1]
+        windows.append(
+            {
+                "months": trip,
+                "start": f"{trip[0]}-01",
+                "end": f"{trip[2]}-{end_day:02d}",
+                "overlap": overlap,
+                "n_exits": int(len(inside)),
+                "reached_110": reached_110,
+                "reached_1155": reached_1155,
+                "floor_fail": floor_fail,
+                "day_fail": day_fail,
+                "passed": passed,
+                "terminal_return_pct": (terminal_eq / start_eq - 1.0) * 100.0,
+                "max_return_pct": (max_eq / start_eq - 1.0) * 100.0 if max_eq is not None else 0.0,
+                "max_dd_pct": max_dd * 100.0,
+                "worst_day_pct": worst_day * 100.0,
+            }
+        )
+    return windows
+
+
+def max_realized_dd(trades: list[Trade]) -> float:
+    max_dd = 0.0
+    peak = START_EQUITY
+    for tr in trades:
+        if tr.equity_after > peak:
+            peak = tr.equity_after
+        dd = (peak - tr.equity_after) / peak if peak > 0 else 0.0
+        if dd > max_dd:
+            max_dd = dd
+    return max_dd
+
+
+def worst_day_pct(day_pnl, day_start_eq):
+    worst_d, worst_p = None, 0.0
+    for d, pnl in day_pnl.items():
+        start = day_start_eq.get(d, START_EQUITY)
+        if start <= 0:
+            continue
+        pct = pnl / start
+        if pct < worst_p:
+            worst_p, worst_d = pct, d
+    return worst_d, worst_p
+
+
+def days_at_or_below(day_pnl, day_start_eq, thresh: float) -> int:
+    n = 0
+    for d, pnl in day_pnl.items():
+        start = day_start_eq.get(d, START_EQUITY)
+        if start > 0 and pnl / start <= thresh:
+            n += 1
+    return n
+
+
+def slice_pnl(trades, start, end=None):
+    s = 0.0
+    for tr in trades:
+        if tr.exit_ts < start:
+            continue
+        if end is not None and tr.exit_ts > end:
+            continue
+        s += tr.pnl
+    return s
+
+
+def leave_out_two_best_ho(trades):
+    by_m: dict[str, float] = defaultdict(float)
+    for tr in trades:
+        if HO_START <= tr.exit_ts <= HO_END:
+            by_m[prague_month(tr.exit_ts)] += tr.pnl
+    if len(by_m) < 2:
+        return [], slice_pnl(trades, HO_START, HO_END)
+    top2 = [m for m, _ in sorted(by_m.items(), key=lambda kv: kv[1], reverse=True)[:2]]
+    left = sum(
+        tr.pnl
+        for tr in trades
+        if HO_START <= tr.exit_ts <= HO_END and prague_month(tr.exit_ts) not in top2
+    )
+    return top2, left
+
+
+def size_lots(equity: float, risk: float, stop_dist: float) -> float:
+    if stop_dist <= 0 or equity <= 0:
+        return 0.0
+    lots = round(equity * risk / (stop_dist * CONTRACT_SIZE), 2)
+    lots = min(lots, MAX_LOT)
+    if lots < MIN_LOT:
+        return 0.0
+    return float(lots)
+
+
+def pnl_dollars(side: str, entry: float, exit_px: float, lots: float) -> float:
+    raw = (exit_px - entry) if side == "long" else (entry - exit_px)
+    units = lots * CONTRACT_SIZE
+    return raw * units - SPREAD * units - COMMISSION_PER_LOT * lots
+
+
+def count_pass_windows(trades, day_pnl, day_start_eq, window_days: int):
+    if not trades:
+        return 0, 0, []
+    exits = [(tr.exit_ts, tr.equity_after) for tr in trades]
+    all_days = sorted(set(day_start_eq.keys()) | {prague_day(t) for t, _ in exits})
+    if not all_days:
+        return 0, 0, []
+    first_day, last_day = all_days[0], all_days[-1]
+    end_limit = last_day - timedelta(days=window_days - 1)
+    if end_limit < first_day:
+        return 0, 0, []
+    passes = []
+    n_windows = 0
+    exit_pdays = [prague_day(ts) for ts, _ in exits]
+    exit_eqs = [eq for _, eq in exits]
+    cur = first_day
+    while cur <= end_limit:
+        ws, we = cur, cur + timedelta(days=window_days - 1)
+        n_windows += 1
+        start_eq = START_EQUITY
+        for i, pd_ in enumerate(exit_pdays):
+            if pd_ < ws:
+                start_eq = exit_eqs[i]
+            else:
+                break
+        window_eqs = [exit_eqs[i] for i, pd_ in enumerate(exit_pdays) if ws <= pd_ <= we]
+        if not window_eqs:
+            cur += timedelta(days=1)
+            continue
+        max_eq, min_eq = max(window_eqs), min(window_eqs)
+        hit_10 = max_eq >= start_eq * CHALLENGE_MULT
+        hit_15 = max_eq >= start_eq * BOTH_MULT
+        floor_ok = min_eq > start_eq * FLOOR_MULT
+        day_fail = False
+        worst_day_in = 0.0
+        d = ws
+        while d <= we:
+            if d in day_pnl and d in day_start_eq and day_start_eq[d] > 0:
+                pct = day_pnl[d] / day_start_eq[d]
+                if pct < worst_day_in:
+                    worst_day_in = pct
+                if pct <= DAY_FAIL:
+                    day_fail = True
+                    break
+            d += timedelta(days=1)
+        if hit_10 and hit_15 and floor_ok and not day_fail:
+            passes.append(
+                {
+                    "start": ws.isoformat(),
+                    "end": we.isoformat(),
+                    "start_eq": start_eq,
+                    "max_mult": max_eq / start_eq,
+                    "min_mult": min_eq / start_eq,
+                    "worst_day": worst_day_in,
+                }
+            )
+        cur += timedelta(days=1)
+    return len(passes), n_windows, passes[:15]
+
+
+def count_sequential_reset(trades: list[Trade], risk: float, window_days: int = 90):
+    if not trades:
+        return 0, 0, []
+    first = prague_day(trades[0].entry_ts)
+    last = prague_day(trades[-1].exit_ts)
+    end_limit = last - timedelta(days=window_days - 1)
+    if end_limit < first:
+        return 0, 0, []
+    n_win = 0
+    passes = []
+    cur = first
+    while cur <= end_limit:
+        ws = cur
+        we = cur + timedelta(days=window_days - 1)
+        n_win += 1
+
+        def run_stage(start_eq, stage_start_day, need_mult, hard_end):
+            eq = start_eq
+            day_pnl_l: dict[date, float] = defaultdict(float)
+            day_start_l: dict[date, float] = {}
+            done_day = None
+            for tr in trades:
+                pd_e = prague_day(tr.entry_ts)
+                if pd_e < stage_start_day:
+                    continue
+                if pd_e > hard_end:
+                    break
+                if done_day is not None:
+                    break
+                if pd_e not in day_start_l:
+                    day_start_l[pd_e] = eq
+                lots = size_lots(eq, risk, tr.stop_dist)
+                if lots < MIN_LOT:
+                    continue
+                pnl = pnl_dollars(tr.side, tr.entry, tr.exit, lots)
+                eq += pnl
+                pd_x = prague_day(tr.exit_ts)
+                if pd_x > hard_end:
+                    return None, eq, True
+                if pd_x not in day_start_l:
+                    day_start_l[pd_x] = eq - pnl
+                day_pnl_l[pd_x] += pnl
+                if day_pnl_l[pd_x] / day_start_l[pd_x] <= DAY_FAIL:
+                    return None, eq, True
+                if eq < start_eq * FLOOR_MULT:
+                    return None, eq, True
+                if eq >= start_eq * need_mult:
+                    done_day = pd_x
+                    break
+            return done_day, eq, False
+
+        chall_done, _, breached = run_stage(START_EQUITY, ws, CHALLENGE_MULT, we)
+        if breached or chall_done is None:
+            cur += timedelta(days=1)
+            continue
+        ver_start = chall_done + timedelta(days=1)
+        if ver_start > we:
+            cur += timedelta(days=1)
+            continue
+        ver_done, _, breached2 = run_stage(START_EQUITY, ver_start, 1.05, we)
+        if breached2 or ver_done is None:
+            cur += timedelta(days=1)
+            continue
+        total_days = (ver_done - ws).days + 1
+        if total_days <= window_days:
+            passes.append(
+                {
+                    "start": ws.isoformat(),
+                    "challenge_done": chall_done.isoformat(),
+                    "verification_done": ver_done.isoformat(),
+                    "total_days": total_days,
+                }
+            )
+        cur += timedelta(days=1)
+    return len(passes), n_win, passes[:15]
+
+
+def summarize_our_gates(label, risk, booked, data_end, explorer):
+    trades = booked["trade_objs"]
+    day_pnl = booked["day_pnl"]
+    day_start_eq = booked["day_start_eq"]
+
+    ho_net = slice_pnl(trades, HO_START, HO_END)
+    fit_net = slice_pnl(trades, FIT_START, FIT_END)
+    ext_available = data_end >= EXT_START
+    if ext_available:
+        ext_net = slice_pnl(trades, EXT_START, None)
+        ext_status = "measured"
+    else:
+        ext_net = 0.0
+        ext_status = "UNAVAILABLE (XAG feed ends 2026-09-01; no dukas-ext)"
+
+    leave_drop, leave_net = leave_out_two_best_ho(trades)
+    max_dd = max_realized_dd(trades)
+    worst_d, worst_pct = worst_day_pct(day_pnl, day_start_eq)
+    n_fail = days_at_or_below(day_pnl, day_start_eq, DAY_FAIL)
+
+    ho_days = (HO_END.normalize() - HO_START).days + 1
+    ho_mo = ho_days / 30.44
+    ho_pace = ho_net / ho_mo if ho_mo > 0 else 0.0
+    fit_days = (FIT_END.normalize() - FIT_START).days + 1
+    fit_mo = fit_days / 30.44
+    fit_pace = fit_net / fit_mo if fit_mo > 0 else 0.0
+
+    n60, w60, p60 = count_pass_windows(trades, day_pnl, day_start_eq, 60)
+    n90, w90, p90 = count_pass_windows(trades, day_pnl, day_start_eq, 90)
+    nseq, wseq, pseq = count_sequential_reset(trades, risk, 90)
+
+    ho_cut = date(2025, 11, 8)
+    n90_ho = sum(1 for p in p90 if date.fromisoformat(p["start"]) >= ho_cut)
+    nseq_ho = sum(1 for p in pseq if date.fromisoformat(p["start"]) >= ho_cut)
+    has_90 = n90 >= 1 or nseq >= 1
+    has_90_ho = n90_ho >= 1 or nseq_ho >= 1
+
+    wins = sum(1 for tr in trades if tr.pnl > 0)
+    longs = sum(1 for tr in trades if tr.side == "long")
+    shorts = sum(1 for tr in trades if tr.side == "short")
+    reasons: dict[str, int] = defaultdict(int)
+    for tr in trades:
+        reasons[tr.reason] += 1
+
+    legal = max_dd <= 0.10 + 1e-12 and n_fail == 0 and worst_pct > DAY_FAIL
+    leave_ok = leave_net > 0
+    ho_ok = ho_net > 0
+    outside_ok = explorer["countable_outside"] >= 1
+
+    # Task ACCEPT: DD-legal, HO>0, leave-out OK, ≥1 HO-era ≤90d OR ≥1 outside-streak countable
+    if (
+        legal
+        and ho_ok
+        and leave_ok
+        and (has_90_ho or outside_ok)
+    ):
+        decision = "ACCEPT"
+    elif legal and (has_90 or outside_ok or (ho_ok and leave_ok)):
+        decision = "CONDITIONAL"
+    elif legal:
+        decision = "CONDITIONAL"
+    else:
+        decision = "REJECT"
+
+    return {
+        "label": label,
+        "risk": risk,
+        "decision": decision,
+        "legal": legal,
+        "ho_net": ho_net,
+        "ho_pace": ho_pace,
+        "fit_net": fit_net,
+        "fit_pace": fit_pace,
+        "leave_net": leave_net,
+        "leave_drop": leave_drop,
+        "ext_net": ext_net,
+        "ext_status": ext_status,
+        "ext_available": ext_available,
+        "max_dd": max_dd,
+        "worst_day": str(worst_d) if worst_d else None,
+        "worst_pct": worst_pct,
+        "n_fail_days": n_fail,
+        "n_trades": len(trades),
+        "wins": wins,
+        "wr": wins / len(trades) if trades else 0.0,
+        "longs": longs,
+        "shorts": shorts,
+        "reasons": dict(reasons),
+        "final_equity": booked["final"],
+        "n60": n60,
+        "w60": w60,
+        "p60": p60,
+        "n90": n90,
+        "w90": w90,
+        "p90": p90,
+        "n90_ho": n90_ho,
+        "nseq": nseq,
+        "wseq": wseq,
+        "pseq": pseq,
+        "nseq_ho": nseq_ho,
+        "has_90": has_90,
+        "has_90_ho": has_90_ho,
+        "explorer_countable": explorer["countable"],
+        "explorer_countable_outside": explorer["countable_outside"],
+        "explorer_price_passes": explorer["price_passes"],
+        "outside_ok": outside_ok,
+    }
+
+
+def explorer_summary(real, zeroed, win_real, win_zero):
+    zero_pass_keys = {(w["start"], w["end"]) for w in win_zero if w["passed"]}
+    countable = []
+    for w in win_real:
+        if w["passed"] and (w["start"], w["end"]) in zero_pass_keys:
+            wz = next(x for x in win_zero if x["start"] == w["start"] and x["end"] == w["end"])
+            countable.append({"real": w, "time_zeroed": wz})
+    price_passes = [w for w in win_real if w["passed"]]
+    countable_outside = [c for c in countable if not (set(c["real"]["months"]) & STREAK)]
+    return {
+        "price_passes": len(price_passes),
+        "countable": len(countable),
+        "countable_outside": len(countable_outside),
+        "countable_windows": countable,
+        "price_windows": price_passes,
+        "zeroed_passes": sum(1 for w in win_zero if w["passed"]),
+        "zeroed_final": zeroed["final"],
+        "zeroed_max_dd": zeroed["max_dd"],
+        "zeroed_worst": zeroed["worst_day"],
+    }
+
+
+def write_outputs(official, sensitivity, gen, data_sha, spec_sha, entry5_sha, data_end):
+    PACK.mkdir(parents=True, exist_ok=True)
+    o = official
+    s = sensitivity
+
+    # --- results md ---
+    lines = []
+    a = lines.append
+    a("# Candidate 24 — XAG three-close momentum results")
+    a("")
+    a(f"- Measured: {datetime.now(ET).strftime('%Y-%m-%d %H:%M %Z')}")
+    a(f"- Data sha256: `{data_sha}`")
+    a(f"- Spec sha256: `{spec_sha}`")
+    a(f"- Gold entry5 preregister sha256: `{entry5_sha}` (mechanics source; not retuned)")
+    a(f"- Data end: {data_end}")
+    a("- Live C4 / drip / FREEZE: **untouched**")
+    a("- Costs ASSUMPTION: contract 5000, spread 0.025, commission $3/lot (C19 parity)")
+    a("")
+    a("## Lead")
+    opens = o["decision"] == "ACCEPT"
+    if opens:
+        a(
+            f"**ACCEPT — XAG three-close @ 2.50% opens a ~3mo path on measurement** "
+            f"(DD {o['max_dd']*100:.2f}%, HO ~${o['ho_pace']:,.0f}/mo, "
+            f"≤90d HO-era {o['n90_ho']}, outside countable {o['explorer_countable_outside']})."
+        )
+    elif o["decision"] == "CONDITIONAL":
+        a(
+            f"**CONDITIONAL — not deployable as cleared path.** "
+            f"DD-legal={o['legal']}, HO ~${o['ho_pace']:,.0f}/mo, "
+            f"≤90d {o['n90']}/{o['w90']} (HO-era {o['n90_ho']}), "
+            f"Explorer countable {o['explorer_countable']}/30 "
+            f"(outside {o['explorer_countable_outside']}), leave-out ${o['leave_net']:,.0f}."
+        )
+    else:
+        a(
+            f"**REJECT — XAG three-close does not open a ~3mo path.** "
+            f"legal={o['legal']} DD={o['max_dd']*100:.2f}% "
+            f"HO=${o['ho_pace']:,.0f}/mo 90d={o['n90']}/{o['w90']} "
+            f"outside={o['explorer_countable_outside']}."
+        )
+    a("")
+    a("## Official book @ 2.50%")
+    a("")
+    a("| Metric | Value |")
+    a("|---|---|")
+    a(f"| Decision | **{o['decision']}** |")
+    a(f"| Legal (DD≤10%, no day≤−5%) | {o['legal']} |")
+    a(f"| Final equity | ${o['final_equity']:,.2f} |")
+    a(f"| Max DD | {o['max_dd']*100:.4f}% |")
+    a(f"| Worst Prague day | {o['worst_day']} ({o['worst_pct']*100:.4f}%) |")
+    a(f"| Trades / WR | {o['n_trades']} / {o['wr']*100:.1f}% |")
+    a(f"| Long / Short | {o['longs']} / {o['shorts']} |")
+    a(f"| Exit mix | {o['reasons']} |")
+    a(f"| Fit net / pace | ${o['fit_net']:,.0f} / ${o['fit_pace']:,.0f}/mo |")
+    a(f"| HO net / pace | ${o['ho_net']:,.0f} / ${o['ho_pace']:,.0f}/mo |")
+    a(f"| Leave-out (drop {o['leave_drop']}) | ${o['leave_net']:,.0f} |")
+    a(f"| Ext | {o['ext_status']} (${o['ext_net']:,.0f}) |")
+    a(f"| ≤60d continuous | {o['n60']}/{o['w60']} |")
+    a(f"| ≤90d continuous | {o['n90']}/{o['w90']} (HO-era starts {o['n90_ho']}) |")
+    a(f"| seq90 Challenge→Verify reset | {o['nseq']}/{o['wseq']} (HO-era {o['nseq_ho']}) |")
+    a(
+        f"| Explorer countable (real ∩ TIME-zero) | "
+        f"{o['explorer_countable']}/30 (outside streak {o['explorer_countable_outside']}) |"
+    )
+    a(f"| Explorer price-path passes | {o['explorer_price_passes']}/30 |")
+    a("")
+
+    # Explorer countable table
+    a("### Explorer countable windows @ 2.50%")
+    a("")
+    cw = o.get("_countable_windows", [])
+    if not cw:
+        a("None.")
+    else:
+        a("| start | end | overlap | terminal % | max % | max DD % | worst day % |")
+        a("|---|---|---|---:|---:|---:|---:|")
+        for c in cw:
+            w = c["real"]
+            a(
+                f"| {w['start']} | {w['end']} | {w['overlap']} | "
+                f"{w['terminal_return_pct']:.4f} | {w['max_return_pct']:.4f} | "
+                f"{w['max_dd_pct']:.4f} | {w['worst_day_pct']:.4f} |"
+            )
+    a("")
+
+    if o["p90"]:
+        a("### ≤90d continuous pass sample @ 2.50%")
+        a("")
+        a("| start | end | max_mult | min_mult | worst_day |")
+        a("|---|---|---:|---:|---:|")
+        for p in o["p90"][:10]:
+            a(
+                f"| {p['start']} | {p['end']} | {p['max_mult']:.4f} | "
+                f"{p['min_mult']:.4f} | {p['worst_day']*100:.2f}% |"
+            )
+        a("")
+
+    a("## Sensitivity readout @ 2.60% (NOT official verdict)")
+    a("")
+    a("| Metric | Value |")
+    a("|---|---|")
+    a(f"| Decision (informational) | {s['decision']} |")
+    a(f"| Legal | {s['legal']} |")
+    a(f"| Final equity | ${s['final_equity']:,.2f} |")
+    a(f"| Max DD | {s['max_dd']*100:.4f}% |")
+    a(f"| Worst day | {s['worst_day']} ({s['worst_pct']*100:.4f}%) |")
+    a(f"| HO pace | ${s['ho_pace']:,.0f}/mo |")
+    a(f"| Leave-out | ${s['leave_net']:,.0f} |")
+    a(f"| ≤90d (HO-era) | {s['n90']}/{s['w90']} ({s['n90_ho']}) |")
+    a(f"| seq90 (HO-era) | {s['nseq']}/{s['wseq']} ({s['nseq_ho']}) |")
+    a(
+        f"| Explorer countable / outside | "
+        f"{s['explorer_countable']}/30 / {s['explorer_countable_outside']} |"
+    )
+    a("")
+    a("## Funnel")
+    a("")
+    a(f"```\n{json.dumps(gen['funnel'], indent=2)}\n```")
+    a("")
+    a("## Does XAG three-close open a ~3mo path?")
+    a("")
+    if opens:
+        a("**Yes on measurement gates** — still research-only; nothing arms without Odin yes.")
+    else:
+        a(
+            f"**No cleared ACCEPT.** Official verdict **{o['decision']}**. "
+            "Keep iterating under broad mandate; do not retune this locked rule."
+        )
+    a("")
+    a("Nothing live.")
+
+    RESULTS.write_text("\n".join(lines) + "\n")
+
+    # --- summary txt ---
+    SUMMARY_TXT.write_text(
+        f"C24 XAG three-close @2.50% → {o['decision']} | "
+        f"DD={o['max_dd']*100:.2f}% HO=${o['ho_pace']:,.0f}/mo "
+        f"90d={o['n90']}/{o['w90']}(HO={o['n90_ho']}) "
+        f"seq={o['nseq']}/{o['wseq']}(HO={o['nseq_ho']}) "
+        f"explorer={o['explorer_countable']}/30 outside={o['explorer_countable_outside']} "
+        f"leave=${o['leave_net']:,.0f} legal={o['legal']}\n"
+        f"Sensitivity@2.60%: DD={s['max_dd']*100:.2f}% HO=${s['ho_pace']:,.0f}/mo "
+        f"outside={s['explorer_countable_outside']} decision={s['decision']}\n"
+        f"Live C4 untouched. Research only.\n"
+    )
+
+    # --- JSON ---
+    def scrub(d):
+        out = {k: v for k, v in d.items() if not k.startswith("_")}
+        # drop large pass lists from top-level json? keep samples
+        return out
+
+    payload = {
+        "candidate": 24,
+        "label": "XAG three-close momentum (Gold entry5 port)",
+        "not_live": True,
+        "data_sha256": data_sha,
+        "spec_sha256": spec_sha,
+        "entry5_preregister_sha256": entry5_sha,
+        "costs_assumption": {
+            "contract_size": CONTRACT_SIZE,
+            "spread": SPREAD,
+            "commission_per_lot": COMMISSION_PER_LOT,
+            "note": "C19 ASSUMPTIONS reused",
+        },
+        "official_risk": RISK_OFFICIAL,
+        "sensitivity_risk": RISK_SENSITIVITY,
+        "funnel": gen["funnel"],
+        "unfinished": len(gen["unfinished"]),
+        "n_raw_trades": len(gen["trades"]),
+        "official": scrub(o),
+        "sensitivity": scrub(s),
+        "explorer_countable_windows_official": [
+            {
+                "start": c["real"]["start"],
+                "end": c["real"]["end"],
+                "months": c["real"]["months"],
+                "overlap": c["real"]["overlap"],
+                "terminal_return_pct": c["real"]["terminal_return_pct"],
+                "max_return_pct": c["real"]["max_return_pct"],
+                "max_dd_pct": c["real"]["max_dd_pct"],
+                "worst_day_pct": c["real"]["worst_day_pct"],
+            }
+            for c in o.get("_countable_windows", [])
+        ],
+    }
+    RESULTS_JSON.write_text(json.dumps(payload, indent=2, default=str) + "\n")
+
+    # --- STATUS ---
+    status = []
+    sa = status.append
+    sa("# BTC FTMO research baseline (2026-10-07)")
+    sa("")
+    sa(
+        f"**Status: C24 XAG three-close — {o['decision']}** — "
+        f"DD {o['max_dd']*100:.2f}%, HO ~${o['ho_pace']:,.0f}/mo, "
+        f"≤90d {o['n90']}/{o['w90']} (HO-era {o['n90_ho']}), "
+        f"Explorer outside countable {o['explorer_countable_outside']}/30. "
+        f"{'Not deployable.' if o['decision'] != 'ACCEPT' else 'Research ACCEPT only — nothing arms without Odin yes.'}"
+    )
+    sa("")
+    sa("## Candidate 24")
+    sa("")
+    sa(
+        "| Book | Risk | HO $/mo | Max DD | ≤90d (HO) | seq90 (HO) | "
+        "Explorer out | Leave-out | Legal | Decision |"
+    )
+    sa("|---|---:|---:|---:|---:|---:|---:|---:|---|---|")
+    sa(
+        f"| 24A XAG 3-close | 2.50% | {o['ho_pace']:,.0f} | {o['max_dd']*100:.1f}% | "
+        f"{o['n90']}/{o['w90']} ({o['n90_ho']}) | {o['nseq']}/{o['wseq']} ({o['nseq_ho']}) | "
+        f"{o['explorer_countable_outside']} | {o['leave_net']:,.0f} | "
+        f"{'YES' if o['legal'] else 'NO'} | {o['decision']} |"
+    )
+    sa(
+        f"| 24A sens (NOT verdict) | 2.60% | {s['ho_pace']:,.0f} | {s['max_dd']*100:.1f}% | "
+        f"{s['n90']}/{s['w90']} ({s['n90_ho']}) | {s['nseq']}/{s['wseq']} ({s['nseq_ho']}) | "
+        f"{s['explorer_countable_outside']} | {s['leave_net']:,.0f} | "
+        f"{'YES' if s['legal'] else 'NO'} | {s['decision']} |"
+    )
+    sa("")
+    sa("## Live")
+    sa("Catalogue drip / C4 ops: **untouched**. Nothing from C24 arms without Odin approval. Gold not packaged.")
+    sa("")
+    ROOT_STATUS.write_text("\n".join(status) + "\n")
+
+    # --- PR body ---
+    pr = []
+    pa = pr.append
+    pa("## Candidate 24 — XAG three-close momentum (Gold entry5 port)")
+    pa("")
+    pa("Research only. Broad Odin mandate. Strategy Explorer directed. **No deploy.** Live C4 untouched.")
+    pa("")
+    pa(f"**Verdict (official @ 2.50%): `{o['decision']}`**")
+    pa("")
+    pa("| Book | Risk | HO $/mo | Max DD | ≤90d (HO-era) | seq90 (HO) | Explorer outside | Legal | Decision |")
+    pa("|---|---:|---:|---:|---:|---:|---:|---|---|")
+    pa(
+        f"| XAG 3-close | 2.50% | {o['ho_pace']:,.0f} | {o['max_dd']*100:.1f}% | "
+        f"{o['n90']}/{o['w90']} ({o['n90_ho']}) | {o['nseq']}/{o['wseq']} ({o['nseq_ho']}) | "
+        f"{o['explorer_countable_outside']} | {'YES' if o['legal'] else 'NO'} | **{o['decision']}** |"
+    )
+    pa(
+        f"| sens (not verdict) | 2.60% | {s['ho_pace']:,.0f} | {s['max_dd']*100:.1f}% | "
+        f"{s['n90']}/{s['w90']} ({s['n90_ho']}) | {s['nseq']}/{s['wseq']} ({s['nseq_ho']}) | "
+        f"{s['explorer_countable_outside']} | {'YES' if s['legal'] else 'NO'} | {s['decision']} |"
+    )
+    pa("")
+    pa("### Lead")
+    if opens:
+        pa("XAG three-close **opens** a ~3mo path on dual gates (research ACCEPT only).")
+    else:
+        pa(
+            f"XAG three-close does **not** clear ACCEPT. "
+            f"Outside countable={o['explorer_countable_outside']}; "
+            f"HO-era ≤90d={o['n90_ho']}; leave-out=${o['leave_net']:,.0f}."
+        )
+    pa("")
+    pa("### Mechanics")
+    pa("- Mirror of Gold entry5: three strict consecutive daily closes → next open; SL 2×ATR14; TP 2R; day-5 TIME")
+    pa("- Risk locked **2.50%** a priori; 2.60% sensitivity only")
+    pa("- XAG costs ASSUMPTION (C19): contract 5000, spread 0.025, commission $3/lot")
+    pa("- Dual gates: Explorer 30 month-triplets + Fit/HO/Ext ≤90d")
+    pa("")
+    pa("### Paths")
+    pa("- Spec: `research/btc/2026-10-07-candidate-24/ftmo-candidate-24.md`")
+    pa("- Runner: `research/btc/2026-10-07-candidate-24/run_candidate_24.py`")
+    pa("- Results: `research/btc/2026-10-07-candidate-24/candidate-24-results.md`")
+    pa("")
+    pa("Nothing live. Do not arm without Odin yes.")
+    PR_BODY.write_text("\n".join(pr) + "\n")
+
+    # pack copies
+    for src in [
+        SPEC_PATH,
+        RUNNER,
+        RESULTS,
+        SUMMARY_TXT,
+        RESULTS_JSON,
+        ROOT_STATUS,
+        PR_BODY,
+    ]:
+        if src.exists():
+            shutil.copy2(src, PACK / src.name)
+    (PACK / "STATUS.md").write_text(ROOT_STATUS.read_text())
+    (PACK / "GITHUB-PR-BODY-C24.md").write_text(PR_BODY.read_text())
+
+
+def main() -> None:
+    data_sha = sha256_of(XAG_FEED)
+    if data_sha != EXPECTED_SHA:
+        raise SystemExit(f"ABORT XAG sha mismatch: got {data_sha} expected {EXPECTED_SHA}")
+    entry5_sha = sha256_of(ENTRY5_PREREG)
+    if entry5_sha != ENTRY5_PREREG_SHA:
+        raise SystemExit(f"ABORT entry5 prereg sha mismatch: {entry5_sha}")
+    if not SPEC_PATH.exists():
+        raise SystemExit(f"ABORT missing spec {SPEC_PATH}")
+    spec_sha = sha256_of(SPEC_PATH)
+
+    print("loading harness + XAG…", flush=True)
+    H, compute_atr_14 = load_harness()
+    FTMO_TZ = H.FTMO_TZ
+    m1 = H.load_m1(XAG_FEED)
+    daily = H.resample(m1, "1D")
+    data_end = m1.index[-1]
+    print(f"m1={len(m1)} daily={len(daily)} data_end={data_end}", flush=True)
+
+    print("generating three-close trades…", flush=True)
+    gen = generate(daily, compute_atr_14)
+    raw_trades = gen["trades"]
+    print(
+        f"raw trades={len(raw_trades)} unfinished={len(gen['unfinished'])} funnel={gen['funnel']}",
+        flush=True,
+    )
+
+    print("booking @ 2.50% (official)…", flush=True)
+    real_o = book_raw(raw_trades, risk=RISK_OFFICIAL, zero_time=False, FTMO_TZ=FTMO_TZ)
+    zero_o = book_raw(raw_trades, risk=RISK_OFFICIAL, zero_time=True, FTMO_TZ=FTMO_TZ)
+    win_real_o = score_windows(real_o)
+    win_zero_o = score_windows(zero_o)
+    exp_o = explorer_summary(real_o, zero_o, win_real_o, win_zero_o)
+    official = summarize_our_gates("24A@2.50%", RISK_OFFICIAL, real_o, data_end, exp_o)
+    official["_countable_windows"] = exp_o["countable_windows"]
+
+    print("booking @ 2.60% (sensitivity)…", flush=True)
+    real_s = book_raw(raw_trades, risk=RISK_SENSITIVITY, zero_time=False, FTMO_TZ=FTMO_TZ)
+    zero_s = book_raw(raw_trades, risk=RISK_SENSITIVITY, zero_time=True, FTMO_TZ=FTMO_TZ)
+    win_real_s = score_windows(real_s)
+    win_zero_s = score_windows(zero_s)
+    exp_s = explorer_summary(real_s, zero_s, win_real_s, win_zero_s)
+    sensitivity = summarize_our_gates("24A@2.60%sens", RISK_SENSITIVITY, real_s, data_end, exp_s)
+    sensitivity["_countable_windows"] = exp_s["countable_windows"]
+
+    print(
+        f"OFFICIAL decision={official['decision']} DD={official['max_dd']*100:.2f}% "
+        f"HO={official['ho_pace']:.0f} 90d={official['n90']}/{official['w90']} "
+        f"HO-era={official['n90_ho']} outside={official['explorer_countable_outside']}",
+        flush=True,
+    )
+    print(
+        f"SENS decision={sensitivity['decision']} DD={sensitivity['max_dd']*100:.2f}% "
+        f"outside={sensitivity['explorer_countable_outside']}",
+        flush=True,
+    )
+
+    write_outputs(official, sensitivity, gen, data_sha, spec_sha, entry5_sha, data_end)
+    print("wrote", RESULTS, PACK, flush=True)
+    print(SUMMARY_TXT.read_text(), flush=True)
+
+
+if __name__ == "__main__":
+    main()
