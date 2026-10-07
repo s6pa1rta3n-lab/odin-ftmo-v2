@@ -1,0 +1,1020 @@
+{
+  "candidate": 35,
+  "measured": "2026-10-07 12:41 ET",
+  "lead": "**CONDITIONAL \u2014 US100 NR7 + XAG Donchian soft legal DD + windows, not ACCEPT** via 35D (35D joint + soft gov (verdict)): max DD 6.6%, \u226490d 107/838 (HO-era 0), seq HO-era 0, HO ~$3,011/mo.",
+  "primary": "35D",
+  "decision": "CONDITIONAL",
+  "xag_window_survival": "35B HO\u226490d=8 \u2192 35D joint HO\u226490d=0 (seq HO 0\u21920)",
+  "assumptions": {
+    "xag_contract": 5000.0,
+    "xag_spread": 0.025,
+    "xag_commission": 3.0,
+    "xag_risks": [
+      0.025,
+      0.0125,
+      0.0075
+    ],
+    "us100_spread": 1.0,
+    "us100_risks": [
+      0.01,
+      0.005,
+      0.0025
+    ],
+    "note": "XAG costs ASSUMPTION C19B/C21B parity; full C21B tiers NOT C29 halved"
+  },
+  "books": [
+    {
+      "label": "35A US100 NR7 @1% soft",
+      "book": "35A",
+      "symbol": "US100",
+      "use_gov": true,
+      "full_risk": 0.01,
+      "mid_risk": 0.005,
+      "floor_risk": 0.0025,
+      "n_trades": 21,
+      "wins": 20,
+      "wr": 0.9523809523809523,
+      "longs": 18,
+      "shorts": 3,
+      "reasons": {
+        "TP": 20,
+        "SL": 1
+      },
+      "gov_counts": {
+        "full": 21
+      },
+      "by_sym": {
+        "US100": 21
+      },
+      "ho_net": 18903.226779999874,
+      "ho_pace": 1930.9202120241482,
+      "fit_net": 27735.94474000014,
+      "leave_drop": [
+        "2026-04",
+        "2026-06"
+      ],
+      "leave_net": 10588.275419999982,
+      "leave_ok": true,
+      "ext_net": 0.0,
+      "ext_status": "UNAVAILABLE (feeds end 2026-09-01; no dukas-ext)",
+      "ext_available": false,
+      "max_dd": 0.010055189436447844,
+      "worst_day": "2025-02-21",
+      "worst_pct": -0.010055189436447802,
+      "n_fail_days": 0,
+      "legal": true,
+      "n60": 0,
+      "w60": 762,
+      "n90": 0,
+      "w90": 732,
+      "p90": [],
+      "n90_ho": 0,
+      "nseq": 0,
+      "wseq": 732,
+      "pseq": [],
+      "nseq_ho": 0,
+      "has_90": false,
+      "has_90_ho": false,
+      "decision": "REJECT",
+      "final_equity": 146639.17151999997,
+      "peak_equity": 146639.17151999997,
+      "explorer_xcheck": {
+        "countable": 0,
+        "outside_countable": 0,
+        "outside_windows": [],
+        "best_outside_pct": 8.20896311077519,
+        "best_outside_months": [
+          "2026-04",
+          "2026-05",
+          "2026-06"
+        ],
+        "full_sample_dd": -0.010055189436447844,
+        "final_equity": 146639.17151999997
+      },
+      "meta": {
+        "funnel": {
+          "gov_full": 21,
+          "taken": 21,
+          "taken_US100": 21
+        },
+        "final_equity": 146639.17151999997,
+        "peak_equity": 146639.17151999997,
+        "killed_days": 0,
+        "chassis": "us100-nr7-1.00+softgov",
+        "taken": 21,
+        "use_gov": true,
+        "symbol": "US100",
+        "n_signals_in": 21
+      }
+    },
+    {
+      "label": "35B XAG Donchian @2.50% soft",
+      "book": "35B",
+      "symbol": "XAG",
+      "use_gov": true,
+      "full_risk": 0.025,
+      "mid_risk": 0.0125,
+      "floor_risk": 0.0075,
+      "n_trades": 56,
+      "wins": 30,
+      "wr": 0.5357142857142857,
+      "longs": 44,
+      "shorts": 12,
+      "reasons": {
+        "SL": 14,
+        "TP": 24,
+        "TIME": 17,
+        "SL_OPEN": 1
+      },
+      "gov_counts": {
+        "full": 37,
+        "mid": 13,
+        "floor": 6
+      },
+      "by_sym": {
+        "XAG": 56
+      },
+      "ho_net": 8291.119999999988,
+      "ho_pace": 846.9184322147639,
+      "fit_net": 1663.539999999985,
+      "leave_drop": [
+        "2026-01",
+        "2025-12"
+      ],
+      "leave_net": -6975.560000000003,
+      "leave_ok": false,
+      "ext_net": 0.0,
+      "ext_status": "UNAVAILABLE (feeds end 2026-09-01; no dukas-ext)",
+      "ext_available": false,
+      "max_dd": 0.09403781654124409,
+      "worst_day": "2026-01-31",
+      "worst_pct": -0.026937844170676396,
+      "n_fail_days": 0,
+      "legal": true,
+      "n60": 20,
+      "w60": 868,
+      "n90": 48,
+      "w90": 838,
+      "p90": [
+        {
+          "start": "2025-11-01",
+          "end": "2026-01-29",
+          "start_eq": 101663.53999999994,
+          "max_mult": 1.1556466556250158,
+          "min_mult": 0.9743473422231804,
+          "worst_day": -0.02578013887918046
+        },
+        {
+          "start": "2025-11-02",
+          "end": "2026-01-30",
+          "start_eq": 101663.53999999994,
+          "max_mult": 1.1556466556250158,
+          "min_mult": 0.9743473422231804,
+          "worst_day": -0.02578013887918046
+        },
+        {
+          "start": "2025-11-03",
+          "end": "2026-01-31",
+          "start_eq": 101663.53999999994,
+          "max_mult": 1.1556466556250158,
+          "min_mult": 0.9743473422231804,
+          "worst_day": -0.026937844170676396
+        },
+        {
+          "start": "2025-11-04",
+          "end": "2026-02-01",
+          "start_eq": 101663.53999999994,
+          "max_mult": 1.1556466556250158,
+          "min_mult": 0.9743473422231804,
+          "worst_day": -0.026937844170676396
+        },
+        {
+          "start": "2025-11-05",
+          "end": "2026-02-02",
+          "start_eq": 101663.53999999994,
+          "max_mult": 1.1556466556250158,
+          "min_mult": 0.9743473422231804,
+          "worst_day": -0.026937844170676396
+        },
+        {
+          "start": "2025-11-06",
+          "end": "2026-02-03",
+          "start_eq": 101663.53999999994,
+          "max_mult": 1.1556466556250158,
+          "min_mult": 0.9743473422231804,
+          "worst_day": -0.026937844170676396
+        },
+        {
+          "start": "2025-11-07",
+          "end": "2026-02-04",
+          "start_eq": 101663.53999999994,
+          "max_mult": 1.1556466556250158,
+          "min_mult": 0.9743473422231804,
+          "worst_day": -0.026937844170676396
+        },
+        {
+          "start": "2025-11-08",
+          "end": "2026-02-05",
+          "start_eq": 101663.53999999994,
+          "max_mult": 1.1556466556250158,
+          "min_mult": 0.9743473422231804,
+          "worst_day": -0.026937844170676396
+        },
+        {
+          "start": "2025-11-09",
+          "end": "2026-02-06",
+          "start_eq": 101663.53999999994,
+          "max_mult": 1.1556466556250158,
+          "min_mult": 0.9743473422231804,
+          "worst_day": -0.026937844170676396
+        },
+        {
+          "start": "2025-11-10",
+          "end": "2026-02-07",
+          "start_eq": 101663.53999999994,
+          "max_mult": 1.1556466556250158,
+          "min_mult": 0.9743473422231804,
+          "worst_day": -0.026937844170676396
+        },
+        {
+          "start": "2025-11-11",
+          "end": "2026-02-08",
+          "start_eq": 101663.53999999994,
+          "max_mult": 1.1556466556250158,
+          "min_mult": 0.9743473422231804,
+          "worst_day": -0.026937844170676396
+        },
+        {
+          "start": "2025-11-12",
+          "end": "2026-02-09",
+          "start_eq": 101663.53999999994,
+          "max_mult": 1.1556466556250158,
+          "min_mult": 0.9743473422231804,
+          "worst_day": -0.026937844170676396
+        },
+        {
+          "start": "2025-11-13",
+          "end": "2026-02-10",
+          "start_eq": 101663.53999999994,
+          "max_mult": 1.1556466556250158,
+          "min_mult": 0.9743473422231804,
+          "worst_day": -0.026937844170676396
+        },
+        {
+          "start": "2025-11-14",
+          "end": "2026-02-11",
+          "start_eq": 101663.53999999994,
+          "max_mult": 1.1556466556250158,
+          "min_mult": 0.9743473422231804,
+          "worst_day": -0.026937844170676396
+        },
+        {
+          "start": "2025-11-15",
+          "end": "2026-02-12",
+          "start_eq": 101663.53999999994,
+          "max_mult": 1.1556466556250158,
+          "min_mult": 0.9743473422231804,
+          "worst_day": -0.026937844170676396
+        }
+      ],
+      "n90_ho": 8,
+      "nseq": 60,
+      "wseq": 838,
+      "pseq": [
+        {
+          "start": "2025-07-13",
+          "challenge_done": "2025-09-27",
+          "verification_done": "2025-10-10",
+          "total_days": 90
+        },
+        {
+          "start": "2025-07-14",
+          "challenge_done": "2025-09-27",
+          "verification_done": "2025-10-10",
+          "total_days": 89
+        },
+        {
+          "start": "2025-07-15",
+          "challenge_done": "2025-09-27",
+          "verification_done": "2025-10-10",
+          "total_days": 88
+        },
+        {
+          "start": "2025-07-16",
+          "challenge_done": "2025-09-27",
+          "verification_done": "2025-10-10",
+          "total_days": 87
+        },
+        {
+          "start": "2025-07-17",
+          "challenge_done": "2025-09-27",
+          "verification_done": "2025-10-10",
+          "total_days": 86
+        },
+        {
+          "start": "2025-07-18",
+          "challenge_done": "2025-09-27",
+          "verification_done": "2025-10-10",
+          "total_days": 85
+        },
+        {
+          "start": "2025-07-19",
+          "challenge_done": "2025-09-27",
+          "verification_done": "2025-10-10",
+          "total_days": 84
+        },
+        {
+          "start": "2025-07-20",
+          "challenge_done": "2025-09-27",
+          "verification_done": "2025-10-10",
+          "total_days": 83
+        },
+        {
+          "start": "2025-07-21",
+          "challenge_done": "2025-09-27",
+          "verification_done": "2025-10-10",
+          "total_days": 82
+        },
+        {
+          "start": "2025-07-22",
+          "challenge_done": "2025-09-27",
+          "verification_done": "2025-10-10",
+          "total_days": 81
+        },
+        {
+          "start": "2025-07-23",
+          "challenge_done": "2025-09-27",
+          "verification_done": "2025-10-10",
+          "total_days": 80
+        },
+        {
+          "start": "2025-07-24",
+          "challenge_done": "2025-09-27",
+          "verification_done": "2025-10-10",
+          "total_days": 79
+        },
+        {
+          "start": "2025-07-25",
+          "challenge_done": "2025-09-27",
+          "verification_done": "2025-10-10",
+          "total_days": 78
+        },
+        {
+          "start": "2025-07-26",
+          "challenge_done": "2025-09-27",
+          "verification_done": "2025-10-10",
+          "total_days": 77
+        },
+        {
+          "start": "2025-07-27",
+          "challenge_done": "2025-09-27",
+          "verification_done": "2025-10-10",
+          "total_days": 76
+        }
+      ],
+      "nseq_ho": 0,
+      "has_90": true,
+      "has_90_ho": true,
+      "decision": "CONDITIONAL",
+      "final_equity": 109954.65999999995,
+      "peak_equity": 117487.12999999993,
+      "explorer_xcheck": {
+        "countable": 1,
+        "outside_countable": 0,
+        "outside_windows": [],
+        "best_outside_pct": 6.435126039242833,
+        "best_outside_months": [
+          "2024-03",
+          "2024-04",
+          "2024-05"
+        ],
+        "full_sample_dd": -0.09403781654124409,
+        "final_equity": 109954.65999999995
+      },
+      "meta": {
+        "funnel": {
+          "gov_full": 37,
+          "taken": 56,
+          "taken_XAG": 56,
+          "gov_mid": 13,
+          "gov_floor": 6
+        },
+        "final_equity": 109954.65999999995,
+        "peak_equity": 117487.12999999993,
+        "killed_days": 0,
+        "chassis": "xag-donchian-20d-2.50+softgov",
+        "taken": 56,
+        "use_gov": true,
+        "symbol": "XAG",
+        "n_signals_in": 56
+      }
+    },
+    {
+      "label": "35C joint ungoverened",
+      "book": "35C",
+      "symbol": "JOINT",
+      "use_gov": false,
+      "full_risk": 0.035,
+      "mid_risk": 0.0175,
+      "floor_risk": 0.01,
+      "n_trades": 77,
+      "wins": 50,
+      "wr": 0.6493506493506493,
+      "longs": 62,
+      "shorts": 15,
+      "reasons": {
+        "SL": 15,
+        "TP": 44,
+        "TIME": 17,
+        "SL_OPEN": 1
+      },
+      "gov_counts": {
+        "n/a": 77
+      },
+      "by_sym": {
+        "XAG": 56,
+        "US100": 21
+      },
+      "ho_net": 33010.56733999984,
+      "ho_pace": 3371.9519121798494,
+      "fit_net": 36109.14915000012,
+      "leave_drop": [
+        "2026-01",
+        "2025-12"
+      ],
+      "leave_net": 8792.656659999846,
+      "leave_ok": true,
+      "ext_net": 0.0,
+      "ext_status": "UNAVAILABLE (feeds end 2026-09-01; no dukas-ext)",
+      "ext_available": false,
+      "max_dd": 0.07086974082300783,
+      "worst_day": "2026-06-14",
+      "worst_pct": -0.02703153289738784,
+      "n_fail_days": 0,
+      "legal": true,
+      "n60": 42,
+      "w60": 868,
+      "n90": 120,
+      "w90": 838,
+      "p90": [
+        {
+          "start": "2025-06-30",
+          "end": "2025-09-27",
+          "start_eq": 112035.9680900001,
+          "max_mult": 1.1628613754231365,
+          "min_mult": 1.0198334964911893,
+          "worst_day": 0.0
+        },
+        {
+          "start": "2025-07-01",
+          "end": "2025-09-28",
+          "start_eq": 112035.9680900001,
+          "max_mult": 1.1628613754231365,
+          "min_mult": 1.0198334964911893,
+          "worst_day": 0.0
+        },
+        {
+          "start": "2025-07-02",
+          "end": "2025-09-29",
+          "start_eq": 112035.9680900001,
+          "max_mult": 1.1628613754231365,
+          "min_mult": 1.0198334964911893,
+          "worst_day": 0.0
+        },
+        {
+          "start": "2025-07-03",
+          "end": "2025-09-30",
+          "start_eq": 112035.9680900001,
+          "max_mult": 1.1628613754231365,
+          "min_mult": 1.0198334964911893,
+          "worst_day": 0.0
+        },
+        {
+          "start": "2025-07-04",
+          "end": "2025-10-01",
+          "start_eq": 112035.9680900001,
+          "max_mult": 1.1628613754231365,
+          "min_mult": 1.0198334964911893,
+          "worst_day": 0.0
+        },
+        {
+          "start": "2025-07-05",
+          "end": "2025-10-02",
+          "start_eq": 112035.9680900001,
+          "max_mult": 1.1628613754231365,
+          "min_mult": 1.0198334964911893,
+          "worst_day": 0.0
+        },
+        {
+          "start": "2025-07-06",
+          "end": "2025-10-03",
+          "start_eq": 112035.9680900001,
+          "max_mult": 1.1628613754231365,
+          "min_mult": 1.0198334964911893,
+          "worst_day": 0.0
+        },
+        {
+          "start": "2025-07-07",
+          "end": "2025-10-04",
+          "start_eq": 112035.9680900001,
+          "max_mult": 1.191785479487617,
+          "min_mult": 1.0198334964911893,
+          "worst_day": 0.0
+        },
+        {
+          "start": "2025-07-08",
+          "end": "2025-10-05",
+          "start_eq": 112035.9680900001,
+          "max_mult": 1.191785479487617,
+          "min_mult": 1.0198334964911893,
+          "worst_day": 0.0
+        },
+        {
+          "start": "2025-07-09",
+          "end": "2025-10-06",
+          "start_eq": 114258.0330700001,
+          "max_mult": 1.1686078988266624,
+          "min_mult": 1.0144830079385858,
+          "worst_day": 0.0
+        },
+        {
+          "start": "2025-07-10",
+          "end": "2025-10-07",
+          "start_eq": 114258.0330700001,
+          "max_mult": 1.1686078988266624,
+          "min_mult": 1.0144830079385858,
+          "worst_day": 0.0
+        },
+        {
+          "start": "2025-07-11",
+          "end": "2025-10-08",
+          "start_eq": 114258.0330700001,
+          "max_mult": 1.1686078988266624,
+          "min_mult": 1.0144830079385858,
+          "worst_day": 0.0
+        },
+        {
+          "start": "2025-07-12",
+          "end": "2025-10-09",
+          "start_eq": 114258.0330700001,
+          "max_mult": 1.1686078988266624,
+          "min_mult": 1.0144830079385858,
+          "worst_day": 0.0
+        },
+        {
+          "start": "2025-07-13",
+          "end": "2025-10-10",
+          "start_eq": 114258.0330700001,
+          "max_mult": 1.197823175077348,
+          "min_mult": 1.0144830079385858,
+          "worst_day": 0.0
+        },
+        {
+          "start": "2025-07-14",
+          "end": "2025-10-11",
+          "start_eq": 114258.0330700001,
+          "max_mult": 1.197823175077348,
+          "min_mult": 1.0144830079385858,
+          "worst_day": 0.0
+        }
+      ],
+      "n90_ho": 0,
+      "nseq": 68,
+      "wseq": 838,
+      "pseq": [
+        {
+          "start": "2025-06-30",
+          "challenge_done": "2025-09-13",
+          "verification_done": "2025-09-27",
+          "total_days": 90
+        },
+        {
+          "start": "2025-07-01",
+          "challenge_done": "2025-09-13",
+          "verification_done": "2025-09-27",
+          "total_days": 89
+        },
+        {
+          "start": "2025-07-02",
+          "challenge_done": "2025-09-13",
+          "verification_done": "2025-09-27",
+          "total_days": 88
+        },
+        {
+          "start": "2025-07-03",
+          "challenge_done": "2025-09-13",
+          "verification_done": "2025-09-27",
+          "total_days": 87
+        },
+        {
+          "start": "2025-07-04",
+          "challenge_done": "2025-09-13",
+          "verification_done": "2025-09-27",
+          "total_days": 86
+        },
+        {
+          "start": "2025-07-05",
+          "challenge_done": "2025-09-13",
+          "verification_done": "2025-09-27",
+          "total_days": 85
+        },
+        {
+          "start": "2025-07-06",
+          "challenge_done": "2025-09-13",
+          "verification_done": "2025-09-27",
+          "total_days": 84
+        },
+        {
+          "start": "2025-07-07",
+          "challenge_done": "2025-09-13",
+          "verification_done": "2025-09-27",
+          "total_days": 83
+        },
+        {
+          "start": "2025-07-13",
+          "challenge_done": "2025-09-23",
+          "verification_done": "2025-10-10",
+          "total_days": 90
+        },
+        {
+          "start": "2025-07-14",
+          "challenge_done": "2025-09-27",
+          "verification_done": "2025-10-10",
+          "total_days": 89
+        },
+        {
+          "start": "2025-07-15",
+          "challenge_done": "2025-09-27",
+          "verification_done": "2025-10-10",
+          "total_days": 88
+        },
+        {
+          "start": "2025-07-16",
+          "challenge_done": "2025-09-27",
+          "verification_done": "2025-10-10",
+          "total_days": 87
+        },
+        {
+          "start": "2025-07-17",
+          "challenge_done": "2025-09-27",
+          "verification_done": "2025-10-10",
+          "total_days": 86
+        },
+        {
+          "start": "2025-07-18",
+          "challenge_done": "2025-09-27",
+          "verification_done": "2025-10-10",
+          "total_days": 85
+        },
+        {
+          "start": "2025-07-19",
+          "challenge_done": "2025-09-27",
+          "verification_done": "2025-10-10",
+          "total_days": 84
+        }
+      ],
+      "nseq_ho": 0,
+      "has_90": true,
+      "has_90_ho": false,
+      "decision": "CONDITIONAL",
+      "final_equity": 169119.71648999993,
+      "peak_equity": 169448.32648999995,
+      "explorer_xcheck": {
+        "countable": 2,
+        "outside_countable": 0,
+        "outside_windows": [],
+        "best_outside_pct": 10.529687677038812,
+        "best_outside_months": [
+          "2024-03",
+          "2024-04",
+          "2024-05"
+        ],
+        "full_sample_dd": -0.07086974082300783,
+        "final_equity": 169119.71648999993
+      },
+      "meta": {
+        "funnel": {
+          "taken": 77,
+          "taken_XAG": 56,
+          "taken_US100": 21
+        },
+        "final_equity": 169119.71648999993,
+        "peak_equity": 169448.32648999995,
+        "killed_days": 0,
+        "chassis": "us100nr7+xag-joint-ungov",
+        "taken": 77,
+        "use_gov": false,
+        "symbol": "JOINT",
+        "n_signals_in": 77
+      }
+    },
+    {
+      "label": "35D joint + soft gov (verdict)",
+      "book": "35D",
+      "symbol": "JOINT",
+      "use_gov": true,
+      "full_risk": 0.035,
+      "mid_risk": 0.0175,
+      "floor_risk": 0.01,
+      "n_trades": 77,
+      "wins": 50,
+      "wr": 0.6493506493506493,
+      "longs": 62,
+      "shorts": 15,
+      "reasons": {
+        "SL": 15,
+        "TP": 44,
+        "TIME": 17,
+        "SL_OPEN": 1
+      },
+      "gov_counts": {
+        "full": 69,
+        "mid": 8
+      },
+      "by_sym": {
+        "XAG": 56,
+        "US100": 21
+      },
+      "ho_net": 29476.95163999985,
+      "ho_pace": 3011.0013688644144,
+      "fit_net": 30986.487290000117,
+      "leave_drop": [
+        "2026-01",
+        "2025-12"
+      ],
+      "leave_net": 5782.787879999857,
+      "leave_ok": true,
+      "ext_net": 0.0,
+      "ext_status": "UNAVAILABLE (feeds end 2026-09-01; no dukas-ext)",
+      "ext_available": false,
+      "max_dd": 0.0659146100717234,
+      "worst_day": "2026-06-14",
+      "worst_pct": -0.028459339574900752,
+      "n_fail_days": 0,
+      "legal": true,
+      "n60": 42,
+      "w60": 868,
+      "n90": 107,
+      "w90": 838,
+      "p90": [
+        {
+          "start": "2025-07-07",
+          "end": "2025-10-04",
+          "start_eq": 109016.18951000013,
+          "max_mult": 1.1797110431767834,
+          "min_mult": 1.0099187082658105,
+          "worst_day": 0.0
+        },
+        {
+          "start": "2025-07-08",
+          "end": "2025-10-05",
+          "start_eq": 109016.18951000013,
+          "max_mult": 1.1797110431767834,
+          "min_mult": 1.0099187082658105,
+          "worst_day": 0.0
+        },
+        {
+          "start": "2025-07-09",
+          "end": "2025-10-06",
+          "start_eq": 110097.48929000013,
+          "max_mult": 1.1681247545186415,
+          "min_mult": 1.0146545576143902,
+          "worst_day": 0.0
+        },
+        {
+          "start": "2025-07-10",
+          "end": "2025-10-07",
+          "start_eq": 110097.48929000013,
+          "max_mult": 1.1681247545186415,
+          "min_mult": 1.0146545576143902,
+          "worst_day": 0.0
+        },
+        {
+          "start": "2025-07-11",
+          "end": "2025-10-08",
+          "start_eq": 110097.48929000013,
+          "max_mult": 1.1681247545186415,
+          "min_mult": 1.0146545576143902,
+          "worst_day": 0.0
+        },
+        {
+          "start": "2025-07-12",
+          "end": "2025-10-09",
+          "start_eq": 110097.48929000013,
+          "max_mult": 1.1681247545186415,
+          "min_mult": 1.0146545576143902,
+          "worst_day": 0.0
+        },
+        {
+          "start": "2025-07-13",
+          "end": "2025-10-10",
+          "start_eq": 110097.48929000013,
+          "max_mult": 1.1974660230691987,
+          "min_mult": 1.0146545576143902,
+          "worst_day": 0.0
+        },
+        {
+          "start": "2025-07-14",
+          "end": "2025-10-11",
+          "start_eq": 110097.48929000013,
+          "max_mult": 1.1974660230691987,
+          "min_mult": 1.0146545576143902,
+          "worst_day": 0.0
+        },
+        {
+          "start": "2025-07-15",
+          "end": "2025-10-12",
+          "start_eq": 110097.48929000013,
+          "max_mult": 1.1974660230691987,
+          "min_mult": 1.0146545576143902,
+          "worst_day": 0.0
+        },
+        {
+          "start": "2025-07-16",
+          "end": "2025-10-13",
+          "start_eq": 110097.48929000013,
+          "max_mult": 1.1974660230691987,
+          "min_mult": 1.0146545576143902,
+          "worst_day": 0.0
+        },
+        {
+          "start": "2025-07-17",
+          "end": "2025-10-14",
+          "start_eq": 110097.48929000013,
+          "max_mult": 1.1974660230691987,
+          "min_mult": 1.0146545576143902,
+          "worst_day": 0.0
+        },
+        {
+          "start": "2025-07-18",
+          "end": "2025-10-15",
+          "start_eq": 110097.48929000013,
+          "max_mult": 1.1974660230691987,
+          "min_mult": 1.0146545576143902,
+          "worst_day": 0.0
+        },
+        {
+          "start": "2025-07-19",
+          "end": "2025-10-16",
+          "start_eq": 110097.48929000013,
+          "max_mult": 1.1974660230691987,
+          "min_mult": 1.0146545576143902,
+          "worst_day": 0.0
+        },
+        {
+          "start": "2025-07-20",
+          "end": "2025-10-17",
+          "start_eq": 110097.48929000013,
+          "max_mult": 1.1974660230691987,
+          "min_mult": 1.0146545576143902,
+          "worst_day": 0.0
+        },
+        {
+          "start": "2025-07-21",
+          "end": "2025-10-18",
+          "start_eq": 110097.48929000013,
+          "max_mult": 1.1974660230691987,
+          "min_mult": 1.0146545576143902,
+          "worst_day": 0.0
+        }
+      ],
+      "n90_ho": 0,
+      "nseq": 68,
+      "wseq": 838,
+      "pseq": [
+        {
+          "start": "2025-06-30",
+          "challenge_done": "2025-09-13",
+          "verification_done": "2025-09-27",
+          "total_days": 90
+        },
+        {
+          "start": "2025-07-01",
+          "challenge_done": "2025-09-13",
+          "verification_done": "2025-09-27",
+          "total_days": 89
+        },
+        {
+          "start": "2025-07-02",
+          "challenge_done": "2025-09-13",
+          "verification_done": "2025-09-27",
+          "total_days": 88
+        },
+        {
+          "start": "2025-07-03",
+          "challenge_done": "2025-09-13",
+          "verification_done": "2025-09-27",
+          "total_days": 87
+        },
+        {
+          "start": "2025-07-04",
+          "challenge_done": "2025-09-13",
+          "verification_done": "2025-09-27",
+          "total_days": 86
+        },
+        {
+          "start": "2025-07-05",
+          "challenge_done": "2025-09-13",
+          "verification_done": "2025-09-27",
+          "total_days": 85
+        },
+        {
+          "start": "2025-07-06",
+          "challenge_done": "2025-09-13",
+          "verification_done": "2025-09-27",
+          "total_days": 84
+        },
+        {
+          "start": "2025-07-07",
+          "challenge_done": "2025-09-13",
+          "verification_done": "2025-09-27",
+          "total_days": 83
+        },
+        {
+          "start": "2025-07-13",
+          "challenge_done": "2025-09-23",
+          "verification_done": "2025-10-10",
+          "total_days": 90
+        },
+        {
+          "start": "2025-07-14",
+          "challenge_done": "2025-09-27",
+          "verification_done": "2025-10-10",
+          "total_days": 89
+        },
+        {
+          "start": "2025-07-15",
+          "challenge_done": "2025-09-27",
+          "verification_done": "2025-10-10",
+          "total_days": 88
+        },
+        {
+          "start": "2025-07-16",
+          "challenge_done": "2025-09-27",
+          "verification_done": "2025-10-10",
+          "total_days": 87
+        },
+        {
+          "start": "2025-07-17",
+          "challenge_done": "2025-09-27",
+          "verification_done": "2025-10-10",
+          "total_days": 86
+        },
+        {
+          "start": "2025-07-18",
+          "challenge_done": "2025-09-27",
+          "verification_done": "2025-10-10",
+          "total_days": 85
+        },
+        {
+          "start": "2025-07-19",
+          "challenge_done": "2025-09-27",
+          "verification_done": "2025-10-10",
+          "total_days": 84
+        }
+      ],
+      "nseq_ho": 0,
+      "has_90": true,
+      "has_90_ho": false,
+      "decision": "CONDITIONAL",
+      "final_equity": 160463.43892999995,
+      "peak_equity": 160772.71892999994,
+      "explorer_xcheck": {
+        "countable": 2,
+        "outside_countable": 0,
+        "outside_windows": [],
+        "best_outside_pct": 10.529687677038812,
+        "best_outside_months": [
+          "2024-03",
+          "2024-04",
+          "2024-05"
+        ],
+        "full_sample_dd": -0.0659146100717234,
+        "final_equity": 160463.43892999995
+      },
+      "meta": {
+        "funnel": {
+          "gov_full": 69,
+          "taken": 77,
+          "taken_XAG": 56,
+          "taken_US100": 21,
+          "gov_mid": 8
+        },
+        "final_equity": 160463.43892999995,
+        "peak_equity": 160772.71892999994,
+        "killed_days": 0,
+        "chassis": "us100nr7+xag-joint+softgov",
+        "taken": 77,
+        "use_gov": true,
+        "symbol": "JOINT",
+        "n_signals_in": 77
+      }
+    }
+  ],
+  "data": {
+    "us100_sha": "5d833b201f3374797bd64ae50e2937af21affc1a52ef33a2119d316d35fdd3af",
+    "us100_end": "2026-09-01 23:58:00+00:00",
+    "xag_sha": "6970b0a1ef4bea4fc4c4deb6f4730ab78b719bd420c47955bfee72a6aa7afe1c",
+    "xag_end": "2026-09-01 23:59:00+00:00"
+  }
+}
