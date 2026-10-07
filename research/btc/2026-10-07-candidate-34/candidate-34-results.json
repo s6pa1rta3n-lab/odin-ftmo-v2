@@ -1,0 +1,381 @@
+{
+  "candidate": 34,
+  "index_symbol": "USA30",
+  "use_fx": false,
+  "measured": "2026-10-07 12:40 ET",
+  "lead": "**NO \u2014 US100 NR7 + USA30 Keltner55 does not open a deployable ~3mo path.** DD illegal, HO\u22640, or zero \u226490d windows.",
+  "primary": "34A",
+  "decision": "REJECT",
+  "assumptions": {
+    "jpn_contract": 1.0,
+    "jpn_spread": 2.5,
+    "jpn_commission": 0.0,
+    "us100_spread": 1.0,
+    "fx": "N/A (USA30 USD)"
+  },
+  "books": [
+    {
+      "label": "34A US100 NR7 @1% soft",
+      "book": "34A",
+      "symbol": "US100",
+      "use_gov": true,
+      "full_risk": 0.01,
+      "mid_risk": 0.005,
+      "floor_risk": 0.0025,
+      "n_trades": 21,
+      "wins": 20,
+      "wr": 0.9523809523809523,
+      "longs": 18,
+      "shorts": 3,
+      "reasons": {
+        "TP": 20,
+        "SL": 1
+      },
+      "gov_counts": {
+        "full": 21
+      },
+      "by_sym": {
+        "US100": 21
+      },
+      "ho_net": 18903.226779999874,
+      "ho_pace": 1930.9202120241482,
+      "fit_net": 27735.94474000014,
+      "leave_drop": [
+        "2026-04",
+        "2026-06"
+      ],
+      "leave_net": 10588.275419999982,
+      "leave_ok": true,
+      "ext_net": 0.0,
+      "ext_status": "UNAVAILABLE (index feeds end 2026-09-01; no dukas-ext)",
+      "ext_available": false,
+      "max_dd": 0.010055189436447844,
+      "worst_day": "2025-02-21",
+      "worst_pct": -0.010055189436447802,
+      "n_fail_days": 0,
+      "legal": true,
+      "n60": 0,
+      "w60": 762,
+      "n90": 0,
+      "w90": 732,
+      "p90": [],
+      "n90_ho": 0,
+      "nseq": 0,
+      "wseq": 732,
+      "pseq": [],
+      "nseq_ho": 0,
+      "has_90": false,
+      "has_90_ho": false,
+      "decision": "REJECT",
+      "final_equity": 146639.17151999997,
+      "peak_equity": 146639.17151999997,
+      "explorer_xcheck": {
+        "countable": 0,
+        "outside_countable": 0,
+        "outside_windows": [],
+        "best_outside_pct": 8.20896311077519,
+        "best_outside_months": [
+          "2026-04",
+          "2026-05",
+          "2026-06"
+        ],
+        "full_sample_dd": -0.010055189436447844,
+        "final_equity": 146639.17151999997
+      },
+      "meta": {
+        "funnel": {
+          "gov_full": 21,
+          "taken": 21,
+          "taken_US100": 21
+        },
+        "final_equity": 146639.17151999997,
+        "peak_equity": 146639.17151999997,
+        "killed_days": 0,
+        "chassis": "us100-nr7-1.00+softgov",
+        "taken": 21,
+        "use_gov": true,
+        "symbol": "US100",
+        "n_signals_in": 21,
+        "index_symbol": "USA30",
+        "use_fx": false
+      }
+    },
+    {
+      "label": "34B USA30 Keltner55 @2.50% soft",
+      "book": "34B",
+      "symbol": "USA30",
+      "use_gov": true,
+      "full_risk": 0.025,
+      "mid_risk": 0.0125,
+      "floor_risk": 0.00625,
+      "n_trades": 59,
+      "wins": 30,
+      "wr": 0.5084745762711864,
+      "longs": 39,
+      "shorts": 20,
+      "reasons": {
+        "TIME": 45,
+        "SL": 11,
+        "TP": 3
+      },
+      "gov_counts": {
+        "full": 31,
+        "mid": 11,
+        "floor": 17
+      },
+      "by_sym": {
+        "USA30": 59
+      },
+      "ho_net": -2662.731438000003,
+      "ho_pace": -271.9917616534231,
+      "fit_net": 8183.527876000098,
+      "leave_drop": [
+        "2026-03",
+        "2026-01"
+      ],
+      "leave_net": -3856.0249580000122,
+      "leave_ok": false,
+      "ext_net": 0.0,
+      "ext_status": "UNAVAILABLE (index feeds end 2026-09-01; no dukas-ext)",
+      "ext_available": false,
+      "max_dd": 0.09202197774613667,
+      "worst_day": "2024-04-03",
+      "worst_pct": -0.02511056876182527,
+      "n_fail_days": 0,
+      "legal": true,
+      "n60": 0,
+      "w60": 866,
+      "n90": 0,
+      "w90": 836,
+      "p90": [],
+      "n90_ho": 0,
+      "nseq": 0,
+      "wseq": 836,
+      "pseq": [],
+      "nseq_ho": 0,
+      "has_90": false,
+      "has_90_ho": false,
+      "decision": "REJECT",
+      "final_equity": 105520.79643800008,
+      "peak_equity": 116215.14381600011,
+      "explorer_xcheck": {
+        "countable": 0,
+        "outside_countable": 0,
+        "outside_windows": [],
+        "best_outside_pct": 8.161644290260185,
+        "best_outside_months": [
+          "2025-03",
+          "2025-04",
+          "2025-05"
+        ],
+        "full_sample_dd": -0.09202197774613667,
+        "final_equity": 105520.79643800008
+      },
+      "meta": {
+        "funnel": {
+          "gov_full": 31,
+          "taken": 59,
+          "taken_USA30": 59,
+          "gov_mid": 11,
+          "gov_floor": 17
+        },
+        "final_equity": 105520.79643800008,
+        "peak_equity": 116215.14381600011,
+        "killed_days": 0,
+        "chassis": "usa30-keltner55-2.50+softgov",
+        "taken": 59,
+        "use_gov": true,
+        "symbol": "USA30",
+        "n_signals_in": 59,
+        "index_symbol": "USA30",
+        "use_fx": false
+      }
+    },
+    {
+      "label": "34C joint ungoverened",
+      "book": "34C",
+      "symbol": "JOINT",
+      "use_gov": false,
+      "full_risk": 0.035,
+      "mid_risk": 0.0175,
+      "floor_risk": 0.00875,
+      "n_trades": 80,
+      "wins": 50,
+      "wr": 0.625,
+      "longs": 57,
+      "shorts": 23,
+      "reasons": {
+        "TIME": 45,
+        "SL": 12,
+        "TP": 23
+      },
+      "gov_counts": {
+        "n/a": 80
+      },
+      "by_sym": {
+        "USA30": 59,
+        "US100": 21
+      },
+      "ho_net": 9511.04563199984,
+      "ho_pace": 971.5309699264266,
+      "fit_net": 38389.22801400027,
+      "leave_drop": [
+        "2026-03",
+        "2026-01"
+      ],
+      "leave_net": -2657.932528000187,
+      "leave_ok": false,
+      "ext_net": 0.0,
+      "ext_status": "UNAVAILABLE (index feeds end 2026-09-01; no dukas-ext)",
+      "ext_available": false,
+      "max_dd": 0.08886495210292308,
+      "worst_day": "2024-11-07",
+      "worst_pct": -0.025109384317737123,
+      "n_fail_days": 0,
+      "legal": true,
+      "n60": 0,
+      "w60": 866,
+      "n90": 0,
+      "w90": 836,
+      "p90": [],
+      "n90_ho": 0,
+      "nseq": 0,
+      "wseq": 836,
+      "pseq": [],
+      "nseq_ho": 0,
+      "has_90": false,
+      "has_90_ho": false,
+      "decision": "REJECT",
+      "final_equity": 147900.273646,
+      "peak_equity": 152483.94459800006,
+      "explorer_xcheck": {
+        "countable": 0,
+        "outside_countable": 0,
+        "outside_windows": [],
+        "best_outside_pct": 12.5106192327324,
+        "best_outside_months": [
+          "2025-03",
+          "2025-04",
+          "2025-05"
+        ],
+        "full_sample_dd": -0.08886495210292308,
+        "final_equity": 147900.273646
+      },
+      "meta": {
+        "funnel": {
+          "taken": 80,
+          "taken_USA30": 59,
+          "taken_US100": 21
+        },
+        "final_equity": 147900.273646,
+        "peak_equity": 152483.94459800006,
+        "killed_days": 0,
+        "chassis": "us100nr7+usa30-joint-ungov",
+        "taken": 80,
+        "use_gov": false,
+        "symbol": "JOINT",
+        "n_signals_in": 80,
+        "index_symbol": "USA30",
+        "use_fx": false
+      }
+    },
+    {
+      "label": "34D joint + soft gov (verdict)",
+      "book": "34D",
+      "symbol": "JOINT",
+      "use_gov": true,
+      "full_risk": 0.035,
+      "mid_risk": 0.0175,
+      "floor_risk": 0.00875,
+      "n_trades": 80,
+      "wins": 50,
+      "wr": 0.625,
+      "longs": 57,
+      "shorts": 23,
+      "reasons": {
+        "TIME": 45,
+        "SL": 12,
+        "TP": 23
+      },
+      "gov_counts": {
+        "full": 63,
+        "mid": 17
+      },
+      "by_sym": {
+        "USA30": 59,
+        "US100": 21
+      },
+      "ho_net": 6607.6489259998625,
+      "ho_pace": 674.9558164679054,
+      "fit_net": 37963.62655400028,
+      "leave_drop": [
+        "2026-03",
+        "2026-05"
+      ],
+      "leave_net": -1517.0238740001382,
+      "leave_ok": false,
+      "ext_net": 0.0,
+      "ext_status": "UNAVAILABLE (index feeds end 2026-09-01; no dukas-ext)",
+      "ext_available": false,
+      "max_dd": 0.07432528314700199,
+      "worst_day": "2024-11-07",
+      "worst_pct": -0.025109384317737123,
+      "n_fail_days": 0,
+      "legal": true,
+      "n60": 0,
+      "w60": 866,
+      "n90": 0,
+      "w90": 836,
+      "p90": [],
+      "n90_ho": 0,
+      "nseq": 0,
+      "wseq": 836,
+      "pseq": [],
+      "nseq_ho": 0,
+      "has_90": false,
+      "has_90_ho": false,
+      "decision": "REJECT",
+      "final_equity": 144571.2754800001,
+      "peak_equity": 149054.36884800013,
+      "explorer_xcheck": {
+        "countable": 0,
+        "outside_countable": 0,
+        "outside_windows": [],
+        "best_outside_pct": 12.5106192327324,
+        "best_outside_months": [
+          "2025-03",
+          "2025-04",
+          "2025-05"
+        ],
+        "full_sample_dd": -0.07432528314700199,
+        "final_equity": 144571.2754800001
+      },
+      "meta": {
+        "funnel": {
+          "gov_full": 63,
+          "taken": 80,
+          "taken_USA30": 59,
+          "taken_US100": 21,
+          "gov_mid": 17
+        },
+        "final_equity": 144571.2754800001,
+        "peak_equity": 149054.36884800013,
+        "killed_days": 0,
+        "chassis": "us100nr7+usa30-joint+softgov",
+        "taken": 80,
+        "use_gov": true,
+        "symbol": "JOINT",
+        "n_signals_in": 80,
+        "index_symbol": "USA30",
+        "use_fx": false
+      }
+    }
+  ],
+  "data": {
+    "us100_sha": "5d833b201f3374797bd64ae50e2937af21affc1a52ef33a2119d316d35fdd3af",
+    "us100_end": "2026-09-01 23:58:00+00:00",
+    "index_sha": "968d27f1eb1ea5e8df4fb138a077ec73be4d478238c4ad938cb021ec3b84746a",
+    "index_end": "2026-09-01 23:59:00+00:00",
+    "fx_sha": "N/A"
+  }
+}
