@@ -1,0 +1,9 @@
+**CONDITIONAL — Ext repair incomplete; no ACCEPT** via 46C: max DD 8.1%, HO≤90d 6, HO ~$1,434/mo, leave $151 (Δ vs 46A -2,218), Ext $-1,232. Ext $-1,232 still blocks ACCEPT (leave green). Lowering BTC improves Ext but leave dies before Ext≥0; soft BTC best Ext still red.
+
+XAG_WINDOW_SURVIVAL|46A HO≤90d=6 leave=2370 → 46A HO≤90d=6 DD=9.9% leave=2370 (Δ+0) | 46B HO≤90d=6 DD=9.5% leave=691 (Δ-1678) | 46C HO≤90d=6 DD=8.1% leave=151 (Δ-2218) | 46D HO≤90d=8 DD=7.9% leave=-572 (Δ-2942) | 46E HO≤90d=8 DD=7.6% leave=-1267 (Δ-3637) | 46F HO≤90d=6 DD=8.3% leave=-3170 (Δ-5539) | windows_survived=Y
+46A|JOINT|CONDITIONAL|pace=$1663/mo|DD=9.9%|90HO=6|leave=2370|dLeave=+0|legal=True
+46B|JOINT|CONDITIONAL|pace=$1455/mo|DD=9.5%|90HO=6|leave=691|dLeave=-1678|legal=True
+46C|JOINT|CONDITIONAL|pace=$1434/mo|DD=8.1%|90HO=6|leave=151|dLeave=-2218|legal=True
+46D|JOINT|CONDITIONAL|pace=$1344/mo|DD=7.9%|90HO=8|leave=-572|dLeave=-2942|legal=True
+46E|JOINT|CONDITIONAL|pace=$1279/mo|DD=7.6%|90HO=8|leave=-1267|dLeave=-3637|legal=True
+46F|JOINT|CONDITIONAL|pace=$1146/mo|DD=8.3%|90HO=6|leave=-3170|dLeave=-5539|legal=True
