@@ -1,0 +1,386 @@
+{
+  "candidate": 31,
+  "index_symbol": "JPN225",
+  "use_fx": true,
+  "measured": "2026-10-07 12:36 ET",
+  "lead": "**NO \u2014 US100 NR7 + JPN225 Keltner55 does not open a deployable ~3mo path.** DD illegal, HO\u22640, or zero \u226490d windows.",
+  "primary": "31D",
+  "decision": "REJECT",
+  "assumptions": {
+    "jpn_contract": 10.0,
+    "jpn_spread": 8.0,
+    "jpn_commission": 0.0,
+    "us100_spread": 1.0,
+    "fx": "USDJPY mid"
+  },
+  "books": [
+    {
+      "label": "31A US100 NR7 @1% soft",
+      "book": "31A",
+      "symbol": "US100",
+      "use_gov": true,
+      "full_risk": 0.01,
+      "mid_risk": 0.005,
+      "floor_risk": 0.0025,
+      "n_trades": 21,
+      "wins": 20,
+      "wr": 0.9523809523809523,
+      "longs": 18,
+      "shorts": 3,
+      "reasons": {
+        "TP": 20,
+        "SL": 1
+      },
+      "gov_counts": {
+        "full": 21
+      },
+      "by_sym": {
+        "US100": 21
+      },
+      "ho_net": 18903.226779999874,
+      "ho_pace": 1930.9202120241482,
+      "fit_net": 27735.94474000014,
+      "leave_drop": [
+        "2026-04",
+        "2026-06"
+      ],
+      "leave_net": 10588.275419999982,
+      "leave_ok": true,
+      "ext_net": 0.0,
+      "ext_status": "UNAVAILABLE (index feeds end 2026-09-01; no dukas-ext)",
+      "ext_available": false,
+      "max_dd": 0.010055189436447844,
+      "worst_day": "2025-02-21",
+      "worst_pct": -0.010055189436447802,
+      "n_fail_days": 0,
+      "legal": true,
+      "n60": 0,
+      "w60": 762,
+      "n90": 0,
+      "w90": 732,
+      "p90": [],
+      "n90_ho": 0,
+      "nseq": 0,
+      "wseq": 732,
+      "pseq": [],
+      "nseq_ho": 0,
+      "has_90": false,
+      "has_90_ho": false,
+      "decision": "REJECT",
+      "final_equity": 146639.17151999997,
+      "peak_equity": 146639.17151999997,
+      "explorer_xcheck": {
+        "countable": 0,
+        "outside_countable": 0,
+        "outside_windows": [],
+        "best_outside_pct": 8.20896311077519,
+        "best_outside_months": [
+          "2026-04",
+          "2026-05",
+          "2026-06"
+        ],
+        "full_sample_dd": -0.010055189436447844,
+        "final_equity": 146639.17151999997
+      },
+      "meta": {
+        "funnel": {
+          "gov_full": 21,
+          "taken": 21,
+          "taken_US100": 21
+        },
+        "final_equity": 146639.17151999997,
+        "peak_equity": 146639.17151999997,
+        "killed_days": 0,
+        "chassis": "us100-nr7-1.00+softgov",
+        "taken": 21,
+        "use_gov": true,
+        "symbol": "US100",
+        "n_signals_in": 21,
+        "index_symbol": "JPN225",
+        "use_fx": true
+      }
+    },
+    {
+      "label": "31B JPN225 Keltner55 @2.50% soft",
+      "book": "31B",
+      "symbol": "JPN225",
+      "use_gov": true,
+      "full_risk": 0.025,
+      "mid_risk": 0.0125,
+      "floor_risk": 0.00625,
+      "n_trades": 47,
+      "wins": 25,
+      "wr": 0.5319148936170213,
+      "longs": 34,
+      "shorts": 13,
+      "reasons": {
+        "TIME": 34,
+        "SL": 9,
+        "TP": 3,
+        "SL_OPEN": 1
+      },
+      "gov_counts": {
+        "full": 27,
+        "mid": 11,
+        "floor": 9
+      },
+      "by_sym": {
+        "JPN225": 47
+      },
+      "ho_net": 4733.768557563319,
+      "ho_pace": 483.54333856452155,
+      "fit_net": 7154.950125733273,
+      "leave_drop": [
+        "2026-01",
+        "2026-04"
+      ],
+      "leave_net": -1437.511554627159,
+      "leave_ok": false,
+      "ext_net": 0.0,
+      "ext_status": "UNAVAILABLE (index feeds end 2026-09-01; no dukas-ext)",
+      "ext_available": false,
+      "max_dd": 0.09320186527795633,
+      "worst_day": "2024-10-31",
+      "worst_pct": -0.026640166414238334,
+      "n_fail_days": 0,
+      "legal": true,
+      "n60": 0,
+      "w60": 875,
+      "n90": 0,
+      "w90": 845,
+      "p90": [],
+      "n90_ho": 0,
+      "nseq": 0,
+      "wseq": 845,
+      "pseq": [],
+      "nseq_ho": 0,
+      "has_90": false,
+      "has_90_ho": false,
+      "decision": "REJECT",
+      "final_equity": 111888.71868329661,
+      "peak_equity": 114996.88324248091,
+      "explorer_xcheck": {
+        "countable": 0,
+        "outside_countable": 0,
+        "outside_windows": [],
+        "best_outside_pct": 10.122251667122018,
+        "best_outside_months": [
+          "2024-06",
+          "2024-07",
+          "2024-08"
+        ],
+        "full_sample_dd": -0.09320186527795633,
+        "final_equity": 111888.71868329661
+      },
+      "meta": {
+        "funnel": {
+          "gov_full": 27,
+          "taken": 47,
+          "taken_JPN225": 47,
+          "gov_mid": 11,
+          "gov_floor": 9
+        },
+        "final_equity": 111888.71868329661,
+        "peak_equity": 114996.88324248091,
+        "killed_days": 0,
+        "chassis": "jpn225-keltner55-2.50+softgov",
+        "taken": 47,
+        "use_gov": true,
+        "symbol": "JPN225",
+        "n_signals_in": 47,
+        "index_symbol": "JPN225",
+        "use_fx": true
+      }
+    },
+    {
+      "label": "31C joint ungoverened",
+      "book": "31C",
+      "symbol": "JOINT",
+      "use_gov": false,
+      "full_risk": 0.035,
+      "mid_risk": 0.0175,
+      "floor_risk": 0.00875,
+      "n_trades": 68,
+      "wins": 45,
+      "wr": 0.6617647058823529,
+      "longs": 52,
+      "shorts": 16,
+      "reasons": {
+        "TIME": 34,
+        "TP": 23,
+        "SL": 10,
+        "SL_OPEN": 1
+      },
+      "gov_counts": {
+        "n/a": 68
+      },
+      "by_sym": {
+        "JPN225": 47,
+        "US100": 21
+      },
+      "ho_net": 29941.77706252307,
+      "ho_pace": 3058.482193903363,
+      "fit_net": 41046.7370794413,
+      "leave_drop": [
+        "2026-01",
+        "2026-04"
+      ],
+      "leave_net": 8772.158197385173,
+      "leave_ok": true,
+      "ext_net": 0.0,
+      "ext_status": "UNAVAILABLE (index feeds end 2026-09-01; no dukas-ext)",
+      "ext_available": false,
+      "max_dd": 0.1013134720648574,
+      "worst_day": "2024-10-31",
+      "worst_pct": -0.026645641265143852,
+      "n_fail_days": 0,
+      "legal": false,
+      "n60": 0,
+      "w60": 875,
+      "n90": 0,
+      "w90": 845,
+      "p90": [],
+      "n90_ho": 0,
+      "nseq": 0,
+      "wseq": 845,
+      "pseq": [],
+      "nseq_ho": 0,
+      "has_90": false,
+      "has_90_ho": false,
+      "decision": "REJECT",
+      "final_equity": 170988.51414196435,
+      "peak_equity": 175737.40126538076,
+      "explorer_xcheck": {
+        "countable": 0,
+        "outside_countable": 0,
+        "outside_windows": [],
+        "best_outside_pct": 14.849307386679378,
+        "best_outside_months": [
+          "2026-04",
+          "2026-05",
+          "2026-06"
+        ],
+        "full_sample_dd": -0.1013134720648574,
+        "final_equity": 170988.51414196435
+      },
+      "meta": {
+        "funnel": {
+          "taken": 68,
+          "taken_JPN225": 47,
+          "taken_US100": 21
+        },
+        "final_equity": 170988.51414196435,
+        "peak_equity": 175737.40126538076,
+        "killed_days": 0,
+        "chassis": "us100nr7+jpn225-joint-ungov",
+        "taken": 68,
+        "use_gov": false,
+        "symbol": "JOINT",
+        "n_signals_in": 68,
+        "index_symbol": "JPN225",
+        "use_fx": true
+      }
+    },
+    {
+      "label": "31D joint + soft gov (verdict)",
+      "book": "31D",
+      "symbol": "JOINT",
+      "use_gov": true,
+      "full_risk": 0.035,
+      "mid_risk": 0.0175,
+      "floor_risk": 0.00875,
+      "n_trades": 68,
+      "wins": 45,
+      "wr": 0.6617647058823529,
+      "longs": 52,
+      "shorts": 16,
+      "reasons": {
+        "TIME": 34,
+        "TP": 23,
+        "SL": 10,
+        "SL_OPEN": 1
+      },
+      "gov_counts": {
+        "full": 58,
+        "mid": 4,
+        "floor": 6
+      },
+      "by_sym": {
+        "JPN225": 47,
+        "US100": 21
+      },
+      "ho_net": 28600.43145661924,
+      "ho_pace": 2921.466891072113,
+      "fit_net": 34719.62797417228,
+      "leave_drop": [
+        "2026-01",
+        "2026-04"
+      ],
+      "leave_net": 8380.3744080498,
+      "leave_ok": true,
+      "ext_net": 0.0,
+      "ext_status": "UNAVAILABLE (index feeds end 2026-09-01; no dukas-ext)",
+      "ext_available": false,
+      "max_dd": 0.08763890424094367,
+      "worst_day": "2024-10-31",
+      "worst_pct": -0.026645641265143852,
+      "n_fail_days": 0,
+      "legal": true,
+      "n60": 0,
+      "w60": 875,
+      "n90": 0,
+      "w90": 845,
+      "p90": [],
+      "n90_ho": 0,
+      "nseq": 0,
+      "wseq": 845,
+      "pseq": [],
+      "nseq_ho": 0,
+      "has_90": false,
+      "has_90_ho": false,
+      "decision": "REJECT",
+      "final_equity": 163320.0594307915,
+      "peak_equity": 167855.06726457144,
+      "explorer_xcheck": {
+        "countable": 0,
+        "outside_countable": 0,
+        "outside_windows": [],
+        "best_outside_pct": 14.850405972462898,
+        "best_outside_months": [
+          "2026-04",
+          "2026-05",
+          "2026-06"
+        ],
+        "full_sample_dd": -0.08763890424094367,
+        "final_equity": 163320.0594307915
+      },
+      "meta": {
+        "funnel": {
+          "gov_full": 58,
+          "taken": 68,
+          "taken_JPN225": 47,
+          "taken_US100": 21,
+          "gov_mid": 4,
+          "gov_floor": 6
+        },
+        "final_equity": 163320.0594307915,
+        "peak_equity": 167855.06726457144,
+        "killed_days": 0,
+        "chassis": "us100nr7+jpn225-joint+softgov",
+        "taken": 68,
+        "use_gov": true,
+        "symbol": "JOINT",
+        "n_signals_in": 68,
+        "index_symbol": "JPN225",
+        "use_fx": true
+      }
+    }
+  ],
+  "data": {
+    "us100_sha": "5d833b201f3374797bd64ae50e2937af21affc1a52ef33a2119d316d35fdd3af",
+    "us100_end": "2026-09-01 23:58:00+00:00",
+    "index_sha": "b7e9a85045eba935ead5812f13d461ba919f60d8220581671bfaf0b66ab82a6e",
+    "index_end": "2026-09-01 23:59:00+00:00",
+    "fx_sha": "ed7c8db716fe2e4a572dfe15d21157944427086636d1b97929bbdd49097cdcca"
+  }
+}
