@@ -1,0 +1,7 @@
+**NO — UK100/FRA40 Donchian+softgov does not open a deployable ~3mo path.** DD illegal, HO≤0, or zero ≤90d windows.
+28A|UK100|gov=False|REJECT|pace=$348/mo|DD=13.7%|90d=0/811(HO=0)|seq=0/811(HO=0)|legal=False
+28A|UK100|gov=True|REJECT|pace=$57/mo|DD=10.3%|90d=0/811(HO=0)|seq=0/811(HO=0)|legal=False
+28B|FRA40|gov=False|REJECT|pace=$-508/mo|DD=20.2%|90d=0/852(HO=0)|seq=0/842(HO=0)|legal=False
+28B|FRA40|gov=True|REJECT|pace=$-160/mo|DD=12.1%|90d=0/852(HO=0)|seq=0/842(HO=0)|legal=False
+28C|JOINT|gov=False|REJECT|pace=$107/mo|DD=10.8%|90d=0/831(HO=0)|seq=0/831(HO=0)|legal=False
+28C|JOINT|gov=True|REJECT|pace=$7/mo|DD=9.0%|90d=0/831(HO=0)|seq=0/831(HO=0)|legal=True
