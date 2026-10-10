@@ -18,7 +18,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from decimal import Decimal
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, Iterable, List, Optional, Sequence
 
 from .sizing import D
 
@@ -149,6 +149,7 @@ class Book:
         def brief(p: Dict[str, Any]) -> Dict[str, Any]:
             return {
                 "id": p.get("id"),
+                "symbol": p.get("symbol"),
                 "type": p.get("type"),
                 "volume": p.get("volume"),
                 "openPrice": p.get("openPrice"),
@@ -166,10 +167,22 @@ def is_auto_position(p: Dict[str, Any], *, magic: int, comment: str) -> bool:
     return _magic(p) == magic or _comment(p) == comment
 
 
-def classify_positions(positions: Sequence[Dict[str, Any]], *, symbol: str, magic: int, comment: str) -> Book:
+def classify_positions(
+    positions: Sequence[Dict[str, Any]],
+    *,
+    magic: int,
+    comment: str,
+    symbol: Optional[str] = None,
+    symbols: Optional[Iterable[str]] = None,
+) -> Book:
+    """Positions on ``symbol`` or on any of ``symbols`` (None/empty ``symbols`` with no ``symbol`` = every symbol)."""
+
+    wanted = set(symbols or ())
+    if symbol is not None:
+        wanted.add(symbol)
     book = Book()
     for p in positions:
-        if (p.get("symbol") or "") != symbol:
+        if wanted and (p.get("symbol") or "") not in wanted:
             continue
         if is_auto_position(p, magic=magic, comment=comment):
             book.auto.append(p)
@@ -250,8 +263,17 @@ class DailyPnl:
         }
 
 
+def auto_positions(positions: Sequence[Dict[str, Any]], *, magic: int, comment: str) -> List[Dict[str, Any]]:
+    """Every open auto-magic position on any symbol (the shared daily cap counts them all)."""
+
+    return [p for p in positions if is_auto_position(p, magic=magic, comment=comment)]
+
+
 def daily_pnl(deals: Sequence[Dict[str, Any]], auto_positions: Sequence[Dict[str, Any]], *, magic: int, comment: str) -> DailyPnl:
-    """Closed P&L from today's deals (profit+commission+swap) plus floating on open auto positions."""
+    """Closed P&L from today's deals (profit+commission+swap) plus floating on open auto positions.
+
+    Both sides are by magic across every symbol: the cap is shared (Odin 2026-10-10 17:07 ET).
+    """
 
     closed = Decimal("0")
     n_deals = 0

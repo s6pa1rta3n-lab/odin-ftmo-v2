@@ -39,7 +39,7 @@ class CommissionResolution:
     deals_value: Optional[Decimal]
     deals_round_trips: int
     deals_in_volume: Decimal
-    env_value: Decimal
+    env_value: Optional[Decimal]
     note: str
 
     def as_dict(self) -> Dict[str, Any]:
@@ -96,15 +96,19 @@ def commission_from_deals(deals: Iterable[Dict[str, Any]], symbol: str) -> "tupl
 def resolve_commission(
     *,
     mode: str,
-    env_value: Decimal,
+    env_value: Optional[Decimal],
     spec: Optional[Dict[str, Any]],
     deals: Optional[List[Dict[str, Any]]],
     symbol: str,
 ) -> CommissionResolution:
+    """``env_value=None`` means no env fallback exists for this symbol: never guess, resolve to none."""
+
     spec_value, spec_field = commission_from_spec(spec or {})
     deals_value, n_rt, in_vol = commission_from_deals(deals or [], symbol)
 
     if mode == "env":
+        if env_value is None:
+            return CommissionResolution(None, "none", spec_value, spec_field, deals_value, n_rt, in_vol, env_value, f"pinned to env but no AUTOEXEC_COMMISSION_PER_LOT_ROUNDTRIP fallback is set for {symbol}")
         return CommissionResolution(env_value, "env", spec_value, spec_field, deals_value, n_rt, in_vol, env_value, "pinned to env")
     if mode == "spec":
         if spec_value is None:
@@ -119,4 +123,16 @@ def resolve_commission(
         return CommissionResolution(spec_value, "spec", spec_value, spec_field, deals_value, n_rt, in_vol, env_value, f"auto: spec field {spec_field}")
     if deals_value is not None:
         return CommissionResolution(deals_value, "deals", spec_value, spec_field, deals_value, n_rt, in_vol, env_value, f"auto: observed over {n_rt} closed round trip(s)")
+    if env_value is None:
+        return CommissionResolution(
+            None,
+            "none",
+            spec_value,
+            spec_field,
+            deals_value,
+            n_rt,
+            in_vol,
+            env_value,
+            f"auto: no broker-reported commission for {symbol} and no env fallback (set AUTOEXEC_COMMISSION_PER_LOT_ROUNDTRIP_{symbol}); skipping",
+        )
     return CommissionResolution(env_value, "env", spec_value, spec_field, deals_value, n_rt, in_vol, env_value, "auto: no broker-reported commission; using env fallback")

@@ -1,6 +1,6 @@
 # btc-advisor-autoexec
 
-Execution endpoint for FTMO BTC Advisor setups. **Order placement is DISABLED by
+Execution endpoint for FTMO BTC Advisor setups on BTCUSD, ETHUSD and SOLUSD. **Order placement is DISABLED by
 default** (`AUTOEXEC_ORDERS_ENABLED=0`). In dry-run every guard runs against live
 read-only MetaAPI data (account, positions, quote, symbol spec, today's deals), the
 would-be order is logged, and nothing is sent.
@@ -16,9 +16,13 @@ Authorization
 - Spec change 05:55 ET: the "max 1 auto position / no entry while a manual BTC
   position is open" guard is **replaced** by the two-position rule in
   [Guard 3](#3-position-count-and-the-second-position-rule).
+- Multi-symbol 17:07 ET: ETHUSD and SOLUSD alongside BTCUSD on the same account; same
+  per-trade guards per symbol from each symbol's own spec/quote/commission; the $500 daily
+  cap, the $90,750 halt and the kill switch are account-wide; 2 positions total across the
+  three symbols (manual + auto). See [Symbols](#symbols).
 
 Target: FTMO login `541458001`, MetaAPI account `a60dfd98-8a34-4c1b-9f2c-b40cdcc2c3bf`,
-symbol `BTCUSD`, London client host `https://mt-client-api-v1.london.agiliumtrade.ai`
+symbols `BTCUSD`, `ETHUSD`, `SOLUSD` (default `BTCUSD`), London client host `https://mt-client-api-v1.london.agiliumtrade.ai`
 (the same REST host/transport pattern as the crawl-back package). All configurable via env.
 
 Nothing here touches `modules/entry_guard.py`, `modules/book_sync.py`, `metaapi_hub/`
@@ -56,22 +60,24 @@ btc-advisor-autoexec/
 |--------|------------|----------------------------------------------------------------------|---------|
 | GET    | `/health`  | –                                                                    | liveness, arming flags; no broker call |
 | GET    | `/status`  | –                                                                    | read-only guard states from live data |
-| POST   | `/setup`   | `{"side":"BUY|SELL","entry_type":"MARKET","stop":<px>,"target":<px>}` + optional `request_id`, `dry_run:true` | entry decision |
-| POST   | `/tighten` | `{"stop":<px>}` + optional `position_id`, `request_id`, `dry_run:true` | tighten the auto position's stop |
+| POST   | `/setup`   | `{"symbol":"BTCUSD|ETHUSD|SOLUSD","side":"BUY|SELL","entry_type":"MARKET","stop":<px>,"target":<px>}` + optional `request_id`, `dry_run:true`. `symbol` defaults to `BTCUSD`; unknown symbols are rejected (`SYMBOL_NOT_ALLOWED`). | entry decision |
+| POST   | `/tighten` | `{"stop":<px>}` + optional `symbol` (default `BTCUSD`), `position_id` (any allowed symbol), `request_id`, `dry_run:true` | tighten an auto position's stop |
 
 If `AUTOEXEC_API_KEY` is set, every request must send `X-Autoexec-Key`.
 
-Decision JSON (both routes) always carries: `ok`/`accepted`, `action`, `mode`
+Decision JSON (both routes) always carries: `ok`/`accepted`, `action`, `symbol`, `mode`
 (`dry_run`|`live`), `sent`, `code`, `reason`, `guards` (equity, halt, book, daily P&L,
 cooldown, …), and for entries `lots`, `risk_usd`, `per_lot_loss`, `spread`,
 `spread_cost_per_lot`, `commission_per_lot_roundtrip`, `commission_source`,
 `stop_distance`, `reward_risk`, `sizing`, `commission`, `order` (the payload that was
 or would be sent), `broker_response` when something was sent, and `second_position`
-when a BTC position was already open.
+when a position on an allowed symbol was already open.
 
 ```bash
-curl -s -XPOST 127.0.0.1:8787/setup -d '{"side":"BUY","entry_type":"MARKET","stop":84500,"target":86500}'
-curl -s -XPOST 127.0.0.1:8787/tighten -d '{"stop":84800}'
+curl -s -XPOST 127.0.0.1:8787/setup -d '{"side":"BUY","entry_type":"MARKET","stop":84500,"target":86500}'            # BTCUSD
+curl -s -XPOST 127.0.0.1:8787/setup -d '{"symbol":"ETHUSD","side":"BUY","entry_type":"MARKET","stop":2900,"target":3300}'
+curl -s -XPOST 127.0.0.1:8787/tighten -d '{"stop":84800}'                      # BTCUSD auto position
+curl -s -XPOST 127.0.0.1:8787/tighten -d '{"symbol":"ETHUSD","stop":2960}'
 curl -s 127.0.0.1:8787/status
 ```
 
@@ -80,8 +86,8 @@ curl -s 127.0.0.1:8787/status
 ```bash
 cd /path/to/btc-advisor-autoexec
 python3 -m autoexec serve
-python3 -m autoexec setup --side BUY --entry-type MARKET --stop 84500 --target 86500 [--dry-run]
-python3 -m autoexec tighten --stop 84800 [--position-id ID] [--dry-run]
+python3 -m autoexec setup [--symbol ETHUSD] --side BUY --entry-type MARKET --stop 84500 --target 86500 [--dry-run]
+python3 -m autoexec tighten [--symbol ETHUSD] --stop 84800 [--position-id ID] [--dry-run]
 python3 -m autoexec status
 python3 -m autoexec kill | unkill          # kill file on/off
 python3 -m autoexec halt-clear --yes       # manual re-enable after an equity halt
@@ -97,20 +103,24 @@ python3 -m autoexec halt-clear --yes       # manual re-enable after an equity ha
 | `AUTOEXEC_TOKEN_SOURCE` | `/home/solveetcoagula/odin_ftmo/config_us100.json` | JSON file with `metaapi.token` (or `metaapi_token`). |
 | `AUTOEXEC_ACCOUNT_ID` | `a60dfd98-8a34-4c1b-9f2c-b40cdcc2c3bf` | MetaAPI account id. |
 | `AUTOEXEC_EXPECTED_LOGIN` | `541458001` | Broker login that `account-information` must report; mismatch refuses everything. |
-| `AUTOEXEC_SYMBOL` | `BTCUSD` | |
+| `AUTOEXEC_SYMBOL` | `BTCUSD` | Default symbol when a request has no `symbol`. Must be in `AUTOEXEC_SYMBOLS`. |
+| `AUTOEXEC_SYMBOLS` | `BTCUSD,ETHUSD,SOLUSD` | Allowed symbols (broker names, case-sensitive as written). |
+| `AUTOEXEC_SECOND_POSITION_SCOPE` | `allowed` | Which symbols' open positions count for the position limit and the second-position rule: `allowed` (the set above) or `all` (every open position on the account). |
 | `AUTOEXEC_CLIENT_HOST` | `https://mt-client-api-v1.london.agiliumtrade.ai` | MetaAPI client REST host. |
 | `AUTOEXEC_ORDERS_ENABLED` | `0` | **Arming flag.** `1` allows `/trade` calls. |
 | `AUTOEXEC_KILL` | `0` | Kill switch (env). |
 | `AUTOEXEC_KILL_FILE` | `<state_dir>/KILL` | Kill switch (file). Presence blocks every entry and modify, no restart needed. |
 | `AUTOEXEC_MAX_RISK_USD` | `250` | Guard 2. |
-| `AUTOEXEC_COMMISSION_PER_LOT_ROUNDTRIP` | `27` | Fallback round-trip commission per 1.0 lot (Odin's advisor figure). |
+| `AUTOEXEC_COMMISSION_PER_LOT_ROUNDTRIP` | `27` | Fallback round-trip commission per 1.0 lot **for BTCUSD only** (Odin's advisor figure). |
+| `AUTOEXEC_COMMISSION_PER_LOT_ROUNDTRIP_<SYMBOL>` | unset | Per-symbol fallback, e.g. `..._ETHUSD`, `..._SOLUSD`. No default: without it and without a broker/deals-derived value the entry is skipped (`COMMISSION_UNAVAILABLE`). |
 | `AUTOEXEC_COMMISSION_SOURCE` | `auto` | `auto` (spec → deals → env), or pin `spec` / `deals` / `env`. Pinned sources with no data fail closed. |
 | `AUTOEXEC_COMMISSION_LOOKBACK_DAYS` | `30` | Window for the deals-derived commission. |
 | `AUTOEXEC_MAX_POSITIONS_TOTAL` | `2` | Guard 3 (values above 2 are refused). |
 | `AUTOEXEC_SECOND_POSITION_MIN_RR` | `2.0` | Guard 3 condition 2. |
 | `AUTOEXEC_MIN_MARGIN_LEVEL_PCT` | `200` | Guard 3 condition 4. |
-| `AUTOEXEC_MARGIN_PER_LOT_USD` | unset | Margin estimate override (per 1.0 lot). |
-| `AUTOEXEC_SYMBOL_LEVERAGE` | unset | Margin estimate: notional / leverage. |
+| `AUTOEXEC_MARGIN_PER_LOT_USD` | unset | Margin estimate override (per 1.0 lot) for BTCUSD. |
+| `AUTOEXEC_SYMBOL_LEVERAGE` | unset | Margin estimate for BTCUSD: notional / leverage. |
+| `AUTOEXEC_MARGIN_PER_LOT_USD_<SYMBOL>` / `AUTOEXEC_SYMBOL_LEVERAGE_<SYMBOL>` | unset | Per-symbol margin calibration (`..._ETHUSD`, `..._SOLUSD`). Unknown → second entries on that symbol are skipped. |
 | `AUTOEXEC_MARGIN_USE_ACCOUNT_LEVERAGE` | `0` | Opt-in last-resort margin estimate from `account.leverage`. |
 | `AUTOEXEC_DAILY_LOSS_CAP_USD` | `500` | Guard 5. |
 | `AUTOEXEC_DAY_TZ` | `Europe/Prague` | FTMO day boundary. |
@@ -124,6 +134,37 @@ python3 -m autoexec halt-clear --yes       # manual re-enable after an equity ha
 | `AUTOEXEC_BIND_HOST` / `AUTOEXEC_BIND_PORT` | `127.0.0.1` / `8787` | |
 | `AUTOEXEC_API_KEY` | unset | Optional shared secret for the HTTP endpoint. |
 | `AUTOEXEC_HTTP_TIMEOUT_SEC` / `AUTOEXEC_TRADE_TIMEOUT_SEC` | `30` / `120` | |
+
+## Symbols
+
+Authorization: Odin, 2026-10-10 17:07 ET.
+
+- `/setup` and the CLI take `symbol`; absent → `BTCUSD`, so BTC behaviour is unchanged
+  when no symbol is given. Unknown symbols → `SYMBOL_NOT_ALLOWED` before any live read.
+- Every per-trade guard is evaluated per symbol from **that symbol's own** MetaAPI
+  specification (`contractSize`, `tickSize`, `tickValue`, `minVolume`, `volumeStep`) and
+  live quote: $250 sizing incl. that symbol's spread and round-trip commission, lots
+  rounded down to that symbol's step, skip if its minimum lot exceeds $250, MARKET only,
+  SL + TP required, stops only tighten.
+- Commission is resolved per symbol (spec → that symbol's closed round trips in the
+  lookback → per-symbol env fallback). The un-suffixed `AUTOEXEC_COMMISSION_PER_LOT_ROUNDTRIP`
+  is BTCUSD's. ETH/SOL values are **not** guessed: set
+  `AUTOEXEC_COMMISSION_PER_LOT_ROUNDTRIP_ETHUSD` / `_SOLUSD` from the broker's figures or
+  the entry is skipped with `COMMISSION_UNAVAILABLE`.
+- Account-wide: the $500 daily cap (closed + floating + commissions on every auto-magic
+  trade on any symbol), the $90,750 equity-halt latch, the kill switch, the post-place
+  cooldown.
+- Position limit: 2 open positions total across the allowed symbols, manual + auto. A
+  second entry on any symbol requires every open position on every allowed symbol to have
+  its SL at breakeven or better, and the rest of Guard 3 is evaluated combined across
+  symbols (each existing position valued at its stop with its own symbol's tick value;
+  averaging-down = same symbol **and** same side in floating loss; shared daily-cap room;
+  equity buffer; margin level with per-symbol calibration).
+- `/tighten`: `symbol` selects the auto position (default `BTCUSD`); `position_id` finds an
+  auto position on any allowed symbol. The side check uses that symbol's live quote.
+- Caches and retry from the reliability fix apply per symbol (spec cache keyed by symbol;
+  one shared lookback read serves every symbol's deals-derived commission).
+- `symbol` is logged on every decision line, including rejections.
 
 ## Guards (server-side, in evaluation order)
 
@@ -158,7 +199,8 @@ Commission source (`commission_source` in every decision):
 3. `env` – `AUTOEXEC_COMMISSION_PER_LOT_ROUNDTRIP` (default 27).
 
 ### 3. Position count and the second-position rule
-All open `BTCUSD` positions count, manual (magic 0) and auto alike.
+All open positions on the allowed symbols (`BTCUSD`, `ETHUSD`, `SOLUSD`) count, manual
+(magic 0) and auto alike, combined.
 
 - 0 open: normal single-entry guards.
 - ≥ `AUTOEXEC_MAX_POSITIONS_TOTAL` (2) open: `MAX_POSITIONS`.
@@ -167,14 +209,14 @@ All open `BTCUSD` positions count, manual (magic 0) and auto alike.
 
 | # | Condition | Reject code |
 |---|---|---|
-| 1 | Every existing BTC position has SL at breakeven or better (long: `SL >= openPrice`; short: `SL <= openPrice`; missing/zero SL fails). | `SECOND_SL_NOT_BREAKEVEN` |
-| 1 | Combined open risk at SL ≤ $250: Σ existing `max(0, directional distance openPrice→SL) × value × volume` (0 at breakeven+) + the new trade's `risk_usd` (which already includes spread + round-trip commission). | `SECOND_COMBINED_RISK` |
+| 1 | Every existing position on every allowed symbol has SL at breakeven or better (long: `SL >= openPrice`; short: `SL <= openPrice`; missing/zero SL fails). | `SECOND_SL_NOT_BREAKEVEN` |
+| 1 | Combined open risk at SL ≤ $250: Σ existing `max(0, directional distance openPrice→SL) × that symbol's value per unit × volume` (0 at breakeven+) + the new trade's `risk_usd` (which already includes spread + round-trip commission). | `SECOND_COMBINED_RISK` |
 | 2 | New setup reward:risk ≥ 2.0 after costs. `reward_per_lot = (target − ask) × value − spread_cost − commission` (BUY; mirrored for SELL); ratio = `reward_per_lot / per_lot_loss`. | `SECOND_RR_TOO_LOW` |
-| 2 | Never averaging down: no existing BTC position on the **same side** with MetaAPI `profit < 0`. | `SECOND_AVERAGING_DOWN` |
+| 2 | Never averaging down: no existing position on the **same symbol and same side** with MetaAPI `profit < 0`. | `SECOND_AVERAGING_DOWN` |
 | 3 | Combined open risk ≤ remaining daily-cap room, `room = 500 − max(0, −(closed + floating today))`. | `SECOND_DAILY_ROOM` |
 | 3 | `equity − combined open risk > 90,750`. | `SECOND_EQUITY_BUFFER` |
 | 4 | Projected margin level `equity / (account.margin + new_margin) × 100 > 200 %`. | `SECOND_MARGIN_LEVEL` / `SECOND_MARGIN_UNKNOWN` |
-| 5 | Max 2 BTC positions total. | `MAX_POSITIONS` |
+| 5 | Max 2 positions total across the allowed symbols. | `MAX_POSITIONS` |
 
 **Limitation:** "fresh setup" cannot be verified server-side. The decision carries
 `fresh_setup_verified: false`; the advisor is responsible for that judgement.
@@ -205,10 +247,10 @@ is `SL_REMOVED`. The TP is preserved as-is and always re-sent; a position withou
 refused (`TP_MISSING_ON_POSITION`); TP changes are not supported
 (`TP_CHANGE_NOT_SUPPORTED`). Tightening is allowed while halted or capped — it reduces risk.
 
-### 5. Daily loss cap ($500, Prague day)
-`closed` = Σ(profit + commission + swap) of today's deals whose magic (or comment) is the
-auto-trader's; balance/credit deals are ignored. `floating` = Σ(profit + commission + swap)
-of open auto positions. If `closed + floating ≤ −500` the entry is rejected
+### 5. Daily loss cap ($500, Prague day, shared across symbols)
+`closed` = Σ(profit + commission + swap) of today's deals on any symbol whose magic (or
+comment) is the auto-trader's; balance/credit deals are ignored. `floating` =
+Σ(profit + commission + swap) of open auto positions on any symbol. If `closed + floating ≤ −500` the entry is rejected
 (`DAILY_CAP_HIT`) and the day is latched in `state.json`; later entries that day are
 `DAILY_CAP_LATCHED` even if floating P&L recovers. "Today" is the Europe/Prague calendar
 day (window computed with `zoneinfo`, DST-aware: 22:00Z in CEST, 23:00Z in CET).
@@ -290,11 +332,12 @@ cd /home/solveetcoagula/odin_ftmo/btc-advisor-autoexec     # or wherever Trading
 AUTOEXEC_TOKEN_SOURCE=/home/solveetcoagula/odin_ftmo/config_us100.json \
 python3 scripts/preflight.py --stop-distance 500          # add --json for machine output
 ```
-Prints login/equity/margin, the raw symbol spec and derived value per unit, live
-bid/ask/spread, the commission resolution (which source will be used and the observed
-deals estimate), lot math for the sample stop, the margin estimate for a hypothetical
-second entry, and every guard state (halt latch, daily cap, position count, cooldown,
-kill, orders flag). The broker object is wrapped so `trade()` cannot be reached.
+Prints login/equity/margin and the account-wide guard states (halt latch, shared daily
+cap, position count by symbol, cooldown, kill, orders flag), then **for each allowed
+symbol**: the broker's symbol name / description / path, the raw spec and derived value
+per unit, live bid/ask/spread, the commission resolution (source and value, or the exact
+env variable to set), lot math for the sample stop and the margin estimate for a
+hypothetical second entry. The broker object is wrapped so `trade()` cannot be reached.
 
 ## Tests
 
@@ -302,7 +345,7 @@ kill, orders flag). The broker object is wrapped so `trade()` cannot be reached.
 cd btc-advisor-autoexec
 python3 -m pytest tests -q
 ```
-168 tests with a fake MetaAPI broker; no network, no token file. Coverage per mechanic:
+208 tests with a fake MetaAPI broker; no network, no token file. Coverage per mechanic:
 sizing incl. spread + commission and floor to step, skip when min lot > $250, non-market
 rejected, missing SL/TP rejected, max-2 total, every second-position condition (accept
 and reject paths, incl. margin unknown/level/override/spec), tighten-only accept and
@@ -383,3 +426,14 @@ Each is left configurable with a safe default rather than guessed (mirrored in t
 12. **Magic number** default `20261010`; **token source** default
     `/home/solveetcoagula/odin_ftmo/config_us100.json` (`metaapi.token`). Confirm both
     (the token must have access to account `a60dfd98-…`).
+13. **ETHUSD / SOLUSD commission and margin** (needs broker confirmation): no values are
+    hard-coded. Trading Ops must read them from the broker/preflight and set
+    `AUTOEXEC_COMMISSION_PER_LOT_ROUNDTRIP_ETHUSD/_SOLUSD` and
+    `AUTOEXEC_SYMBOL_LEVERAGE_ETHUSD/_SOLUSD` (or `AUTOEXEC_MARGIN_PER_LOT_USD_…`); until
+    then ETH/SOL entries skip (`COMMISSION_UNAVAILABLE`) and ETH/SOL second entries skip
+    (`SECOND_MARGIN_UNKNOWN`).
+14. **Scope of the position limit.** Positions on symbols outside the allowed set (e.g.
+    XAUUSD from the gold engine) do not count by default; `AUTOEXEC_SECOND_POSITION_SCOPE=all`
+    makes every open position count. Confirm which is intended.
+15. **Order comment** stays `BTC_ADVISOR_AUTO` on ETH/SOL orders (the magic is the
+    identity). Confirm or set `AUTOEXEC_COMMENT`.

@@ -1,7 +1,12 @@
 """Second-position rule (Odin, 2026-10-10 05:55 ET). Replaces the earlier
 "max 1 auto position / no entries while a manual BTC position is open".
 
-With no BTC position open the normal single-entry guards apply. A SECOND BTC
+Multi-symbol (Odin 2026-10-10 17:07 ET): the limit is 2 open positions TOTAL
+across the allowed symbols (BTCUSD, ETHUSD, SOLUSD), manual + auto, and every
+condition below is evaluated combined across those symbols. "Same side" for
+the averaging-down rule means same symbol and same side.
+
+With no position open the normal single-entry guards apply. A SECOND
 position (manual + auto counted together) is allowed only if ALL hold:
 
 1. Every existing BTC position has its SL at breakeven or better
@@ -62,6 +67,7 @@ def position_side(p: Dict[str, Any]) -> str:
 @dataclass
 class ExistingRisk:
     position_id: str
+    symbol: str
     side: str
     volume: Decimal
     open_price: Decimal
@@ -99,6 +105,7 @@ def existing_position_risk(p: Dict[str, Any], value_per_unit: Decimal) -> Existi
         risk = max(Decimal("0"), loss_dist) * value_per_unit * volume
     return ExistingRisk(
         position_id=str(p.get("id")),
+        symbol=str(p.get("symbol") or ""),
         side=side,
         volume=volume,
         open_price=open_price,
@@ -170,12 +177,14 @@ def check_reward_risk(rr: Decimal, *, min_rr: Decimal) -> None:
         raise Rejected("SECOND_RR_TOO_LOW", f"reward:risk {rr.quantize(Decimal('0.01'))} after costs is below {min_rr}", rr=float(rr))
 
 
-def check_no_averaging_down(existing: Sequence[ExistingRisk], side: str) -> None:
-    losers = [e for e in existing if e.side == side and e.floating_profit < 0]
+def check_no_averaging_down(existing: Sequence[ExistingRisk], side: str, symbol: Optional[str] = None) -> None:
+    """Reject if an existing same-symbol, same-side position is in floating loss."""
+
+    losers = [e for e in existing if e.side == side and e.floating_profit < 0 and (symbol is None or e.symbol == symbol)]
     if losers:
         raise Rejected(
             "SECOND_AVERAGING_DOWN",
-            f"existing {side} position(s) in floating loss; never averaging down",
+            f"existing {symbol or ''} {side} position(s) in floating loss; never averaging down".replace("  ", " "),
             positions=[e.as_dict() for e in losers],
         )
 

@@ -24,6 +24,7 @@ WorkingDirectory=/home/solveetcoagula/odin_ftmo/btc-advisor-autoexec
 Environment=AUTOEXEC_ACCOUNT_ID=a60dfd98-8a34-4c1b-9f2c-b40cdcc2c3bf
 Environment=AUTOEXEC_EXPECTED_LOGIN=541458001
 Environment=AUTOEXEC_SYMBOL=BTCUSD
+Environment=AUTOEXEC_SYMBOLS=BTCUSD,ETHUSD,SOLUSD
 Environment=AUTOEXEC_CLIENT_HOST=https://mt-client-api-v1.london.agiliumtrade.ai
 # Token comes from this file (metaapi.token); never from the unit, never logged.
 Environment=AUTOEXEC_TOKEN_SOURCE=/home/solveetcoagula/odin_ftmo/config_us100.json
@@ -37,14 +38,20 @@ Environment=AUTOEXEC_MAX_RISK_USD=250
 Environment=AUTOEXEC_DAILY_LOSS_CAP_USD=500
 Environment=AUTOEXEC_EQUITY_HALT_USD=90750
 Environment=AUTOEXEC_COMMISSION_PER_LOT_ROUNDTRIP=27
+# Per-symbol commission (round trip per 1.0 lot). NOT guessed: read from the broker /
+# preflight and set via a drop-in. Unset => ETH/SOL entries skip with COMMISSION_UNAVAILABLE.
+# Environment=AUTOEXEC_COMMISSION_PER_LOT_ROUNDTRIP_ETHUSD=
+# Environment=AUTOEXEC_COMMISSION_PER_LOT_ROUNDTRIP_SOLUSD=
 Environment=AUTOEXEC_COMMISSION_SOURCE=auto
 Environment=AUTOEXEC_MAX_POSITIONS_TOTAL=2
 Environment=AUTOEXEC_SECOND_POSITION_MIN_RR=2.0
 Environment=AUTOEXEC_MIN_MARGIN_LEVEL_PCT=200
 # Margin estimate for the second-position rule. Leave unset to skip second
 # entries until Trading Ops confirms a value from the preflight output.
-# Environment=AUTOEXEC_SYMBOL_LEVERAGE=2
-# Environment=AUTOEXEC_MARGIN_PER_LOT_USD=
+# Environment=AUTOEXEC_SYMBOL_LEVERAGE=2            # BTCUSD
+# Environment=AUTOEXEC_MARGIN_PER_LOT_USD=           # BTCUSD
+# Environment=AUTOEXEC_SYMBOL_LEVERAGE_ETHUSD=
+# Environment=AUTOEXEC_SYMBOL_LEVERAGE_SOLUSD=
 
 # --- reliability (Trading Ops 2026-10-10): caches + 429/5xx retry; defaults shown ---
 Environment=AUTOEXEC_SPEC_CACHE_SEC=1800
