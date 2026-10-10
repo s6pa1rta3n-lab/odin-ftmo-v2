@@ -33,20 +33,22 @@ def test_deals_round_trip_math_ignores_open_legs():
     assert value == Decimal("16.2") / Decimal("0.6")  # 27 per lot round trip
 
 
-def test_auto_prefers_spec_then_deals_then_env():
+def test_auto_prefers_spec_then_deals_then_model():
     env = Decimal("27")
-    assert resolve_commission(mode="auto", env_value=env, spec=SPEC, deals=[], symbol="BTCUSD").source == "env"
-    r = resolve_commission(mode="auto", env_value=env, spec=SPEC, deals=RT_DEALS, symbol="BTCUSD")
+    assert resolve_commission(mode="auto", env_value=env, spec=SPEC, deals=[], symbol="BTCUSD", model="flat").source == "env"
+    r = resolve_commission(mode="auto", env_value=env, spec=SPEC, deals=RT_DEALS, symbol="BTCUSD", model="flat")
     assert r.source == "deals" and r.per_lot_roundtrip == Decimal("27")
-    r2 = resolve_commission(mode="auto", env_value=env, spec=dict(SPEC, commission=30.0), deals=RT_DEALS, symbol="BTCUSD")
+    r2 = resolve_commission(mode="auto", env_value=env, spec=dict(SPEC, commission=30.0), deals=RT_DEALS, symbol="BTCUSD", model="flat")
     assert r2.source == "spec" and r2.per_lot_roundtrip == Decimal("30.0")
+    # no model at all -> none (never guessed)
+    assert resolve_commission(mode="auto", env_value=env, spec=SPEC, deals=[], symbol="XAUUSD", model=None).source == "none"
 
 
 def test_pinned_sources_fail_closed_without_data():
     env = Decimal("27")
-    assert resolve_commission(mode="spec", env_value=env, spec=SPEC, deals=RT_DEALS, symbol="BTCUSD").per_lot_roundtrip is None
-    assert resolve_commission(mode="deals", env_value=env, spec=SPEC, deals=[], symbol="BTCUSD").per_lot_roundtrip is None
-    assert resolve_commission(mode="env", env_value=env, spec=dict(SPEC, commission=30.0), deals=RT_DEALS, symbol="BTCUSD").per_lot_roundtrip == env
+    assert resolve_commission(mode="spec", env_value=env, spec=SPEC, deals=RT_DEALS, symbol="BTCUSD", model="flat").per_lot_roundtrip is None
+    assert resolve_commission(mode="deals", env_value=env, spec=SPEC, deals=[], symbol="BTCUSD", model="flat").per_lot_roundtrip is None
+    assert resolve_commission(mode="env", env_value=env, spec=dict(SPEC, commission=30.0), deals=RT_DEALS, symbol="BTCUSD", model="flat").per_lot_roundtrip == env
 
 
 def test_entry_rejected_when_pinned_commission_unavailable(tmp_path):

@@ -91,20 +91,30 @@ def test_capped_at_max_volume(tmp_path, broker):
 def test_value_per_unit_from_tick_fields_prefers_loss_tick_value():
     spec = parse_spec(dict(SPEC, lossTickValue=0.02, profitTickValue=0.01, tickValue=0.01))
     assert spec.value_per_unit_per_lot == Decimal("2")
-    assert spec.value_source == "lossTickValue/tickSize"
+    assert spec.value_source == "spec.lossTickValue/tickSize"
 
 
-def test_value_per_unit_falls_back_to_contract_size():
-    spec = parse_spec({"contractSize": 1, "volumeStep": 0.01, "minVolume": 0.01})
+def test_quote_loss_tick_value_takes_priority_over_spec():
+    spec = parse_spec(dict(SPEC, tickValue=0.01), quote={"bid": 1, "ask": 1, "lossTickValue": 0.05, "profitTickValue": 0.04})
+    assert spec.value_per_unit_per_lot == Decimal("5") and spec.value_source == "quote.lossTickValue/tickSize"
+
+
+def test_value_per_unit_falls_back_to_contract_size_only_when_currency_matches():
+    base = {"contractSize": 1, "tickSize": 0.01, "volumeStep": 0.01, "minVolume": 0.01}
+    spec = parse_spec(dict(base, profitCurrency="USD"), account_currency="USD")
     assert spec.value_per_unit_per_lot == Decimal("1")
-    assert spec.value_source == "contractSize"
+    assert spec.value_source.startswith("contractSize x tickSize")
+    with pytest.raises(SizingError):
+        parse_spec(dict(base, profitCurrency="EUR"), account_currency="USD")
+    with pytest.raises(SizingError):
+        parse_spec(dict(base), account_currency="USD")  # profit currency not reported -> fail closed
 
 
 def test_spec_without_value_fields_fails_closed():
     with pytest.raises(SizingError):
-        parse_spec({"volumeStep": 0.01, "minVolume": 0.01})
+        parse_spec({"volumeStep": 0.01, "minVolume": 0.01, "tickSize": 0.01})
     with pytest.raises(SizingError):
-        parse_spec({"contractSize": 1, "minVolume": 0.01})  # no volumeStep
+        parse_spec({"contractSize": 1, "minVolume": 0.01, "tickSize": 0.01})  # no volumeStep
 
 
 def test_size_position_rejects_non_positive_stop_distance():

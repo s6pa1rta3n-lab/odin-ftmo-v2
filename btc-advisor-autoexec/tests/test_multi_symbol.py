@@ -68,12 +68,13 @@ def test_explicit_symbol_case_insensitive(tmp_path):
 
 
 @pytest.mark.parametrize("sym", ["XAUUSD", "US100.cash", "DOGEUSD", "BTC", 123])
-def test_unknown_symbol_rejected_before_any_read(tmp_path, sym):
+def test_symbol_not_listed_by_broker_rejected(tmp_path, sym):
+    # 19:07 ET #1: validation is against the broker's live list; the fake broker lists only BTC/ETH/SOL here
     ex = _ex(tmp_path)
     d = ex.decide_entry(entry("BUY", symbol=sym))
-    assert d["accepted"] is False and d["code"] == "SYMBOL_NOT_ALLOWED"
+    assert d["accepted"] is False and d["code"] == "SYMBOL_NOT_LISTED"
     assert d["symbol"] == str(sym)
-    assert ex.broker.read_calls == [] and ex.broker.trade_calls == []
+    assert ex.broker.trade_calls == [] and "symbol_specification" not in ex.broker.read_calls
 
 
 def test_allowed_set_configurable(tmp_path):
@@ -82,16 +83,16 @@ def test_allowed_set_configurable(tmp_path):
     assert ex.decide_entry(sol_entry())["code"] == "SYMBOL_NOT_ALLOWED"
     assert ex.decide_entry(eth_entry())["code"] == "PLACED"
     with pytest.raises(ValueError):
-        Config.from_env({"AUTOEXEC_SYMBOLS": "ETHUSD"})  # default symbol BTCUSD not in the set
+        Config.from_env({"AUTOEXEC_SYMBOLS": "ETHUSD"})  # default symbol BTCUSD not in the allowlist
     assert Config.from_env({"AUTOEXEC_SYMBOLS": "ETHUSD", "AUTOEXEC_SYMBOL": "ETHUSD"}).symbol == "ETHUSD"
 
 
 def test_config_defaults_for_multi_symbol():
     c = Config.from_env({})
-    assert c.symbols == ("BTCUSD", "ETHUSD", "SOLUSD") and c.symbol == "BTCUSD"
+    assert c.symbols == () and c.symbol == "BTCUSD"  # empty allowlist = everything the broker lists (19:07 ET)
     assert c.commission_env_for("BTCUSD") == 27.0
     assert c.commission_env_for("ETHUSD") is None and c.commission_env_for("SOLUSD") is None  # never guessed
-    assert c.second_position_scope == "allowed"
+    assert c.second_position_scope == "all"
     assert env_suffix("US100.cash") == "US100_CASH"
     c2 = Config.from_env({"AUTOEXEC_SYMBOLS": "BTCUSD,US100.cash", "AUTOEXEC_COMMISSION_PER_LOT_ROUNDTRIP_US100_CASH": "4"})
     assert c2.commission_env_for("US100.cash") == 4.0
@@ -156,7 +157,7 @@ def test_missing_commission_skips_with_clear_code(tmp_path):
     d = ex.decide_entry(sol_entry())
     assert d["accepted"] is False and d["code"] == "COMMISSION_UNAVAILABLE"
     assert "SOLUSD" in d["reason"] and "AUTOEXEC_COMMISSION_PER_LOT_ROUNDTRIP_SOLUSD" in d["reason"]
-    assert d["commission"]["source"] == "none" and d["commission"]["env_value"] is None
+    assert d["commission"]["source"] == "none" and d["commission"]["env_value"] is None and d["commission"]["model"] is None
     assert ex.broker.trade_calls == []
 
 
@@ -217,20 +218,24 @@ def test_third_position_rejected_across_symbols(tmp_path, positions):
     assert ex.broker.trade_calls == []
 
 
-def test_positions_outside_allowed_set_do_not_count_by_default(tmp_path):
+def test_positions_on_any_symbol_count_by_default(tmp_path):
+    # 19:07 ET #5: account-wide; gold/index positions from other engines count
     positions = [position("X", symbol="XAUUSD", magic=0, comment="", stop_loss=None), position("U", symbol="US100.cash", magic=777, comment="GRIFF", stop_loss=None)]
     ex = _ex(tmp_path, multi_broker(positions=positions))
     d = ex.decide_entry(eth_entry())
-    assert d["code"] == "PLACED" and d["guards"]["total_open"] == 0
+    assert d["code"] == "MAX_POSITIONS" and d["guards"]["total_open"] == 2
 
 
-def test_scope_all_counts_every_symbol(tmp_path):
+def test_scope_allowed_restricts_to_the_allowlist(tmp_path):
     positions = [position("X", symbol="XAUUSD", magic=0, comment="", open_price=4400.0, stop_loss=4300.0)]
     ex = _ex(tmp_path, multi_broker(positions=positions), env={"AUTOEXEC_SECOND_POSITION_SCOPE": "all"})
     d = ex.decide_entry(eth_entry())
     assert d["code"] == "SECOND_SL_NOT_BREAKEVEN" and d["guards"]["total_open"] == 1
     # the XAUUSD spec was fetched to value that position (same fake spec here)
     assert ex.broker.read_calls.count("symbol_specification") >= 2
+    ex2 = _ex(tmp_path / "b", multi_broker(positions=positions), env={"AUTOEXEC_SECOND_POSITION_SCOPE": "allowed", "AUTOEXEC_SYMBOLS": "BTCUSD,ETHUSD,SOLUSD"})
+    d2 = ex2.decide_entry(eth_entry())
+    assert d2["code"] == "PLACED" and d2["guards"]["total_open"] == 0
 
 
 # ---------------------------------------------------------------- cross-symbol second-position conditions
@@ -261,7 +266,7 @@ def test_second_entry_on_other_symbol_allowed_when_all_conditions_hold(tmp_path)
     assert sp["combined_open_risk_usd"] == pytest.approx(d["risk_usd"]) and sp["combined_open_risk_usd"] <= 250
     # reward (3300-3001.5) - 1.5 - 2.2 = 294.8 ; risk 105.2 -> 2.80
     assert sp["reward_risk"] == pytest.approx(294.8 / 105.2)
-    assert sp["margin"]["method"] == "notional / AUTOEXEC_SYMBOL_LEVERAGE"
+    assert sp["margin"]["method"] == "metaapi.calculate-margin"
 
 
 def test_combined_risk_values_each_symbol_with_its_own_spec(tmp_path):
@@ -297,16 +302,22 @@ def test_shared_daily_room_and_equity_buffer_apply_across_symbols(tmp_path):
     assert ex2.decide_entry(eth_entry())["code"] == "SECOND_EQUITY_BUFFER"
 
 
+def _no_calc(positions):
+    b = multi_broker(positions=positions)
+    b.calc_margin_supported = False  # exercise the per-symbol calibration fallbacks
+    return b
+
+
 def test_margin_calibration_is_per_symbol(tmp_path):
     pos = [position("B", symbol="BTCUSD", open_price=84000.0, stop_loss=84100.0)]
-    # only the BTC (legacy) leverage is set -> ETH second entry cannot estimate margin -> skip
-    ex = make_executor(tmp_path, multi_broker(positions=pos), env={"AUTOEXEC_ORDERS_ENABLED": "1", "AUTOEXEC_SYMBOL_LEVERAGE": "2", **ETH_COMM})
+    # only the BTC (legacy) leverage is set -> ETH entry cannot estimate margin -> skip (margin cap, 19:07 ET #3)
+    ex = make_executor(tmp_path, _no_calc(pos), env={"AUTOEXEC_ORDERS_ENABLED": "1", "AUTOEXEC_SYMBOL_LEVERAGE": "2", **ETH_COMM})
     d = ex.decide_entry(eth_entry())
-    assert d["code"] == "SECOND_MARGIN_UNKNOWN", d
-    ex2 = make_executor(tmp_path / "b", multi_broker(positions=pos), env={"AUTOEXEC_ORDERS_ENABLED": "1", "AUTOEXEC_SYMBOL_LEVERAGE_ETHUSD": "2", **ETH_COMM})
+    assert d["code"] == "MARGIN_UNKNOWN", d
+    ex2 = make_executor(tmp_path / "b", _no_calc(pos), env={"AUTOEXEC_ORDERS_ENABLED": "1", "AUTOEXEC_SYMBOL_LEVERAGE_ETHUSD": "2", **ETH_COMM})
     d2 = ex2.decide_entry(eth_entry())
     assert d2["code"] == "PLACED" and d2["second_position"]["margin"]["new_margin_usd"] == pytest.approx(2.3 * 3001.5 / 2)
-    ex3 = make_executor(tmp_path / "c", multi_broker(positions=pos), env={"AUTOEXEC_ORDERS_ENABLED": "1", "AUTOEXEC_MARGIN_PER_LOT_USD_ETHUSD": "1500", **ETH_COMM})
+    ex3 = make_executor(tmp_path / "c", _no_calc(pos), env={"AUTOEXEC_ORDERS_ENABLED": "1", "AUTOEXEC_MARGIN_PER_LOT_USD_ETHUSD": "1500", **ETH_COMM})
     assert ex3.decide_entry(eth_entry())["second_position"]["margin"]["method"].startswith("override")
 
 
@@ -323,7 +334,7 @@ def test_tighten_eth_by_symbol_and_by_position_id(tmp_path):
     assert d2["code"] == "MODIFIED" and d2["symbol"] == "ETHUSD"
     assert ex.tighten_stop({"symbol": "ETHUSD", "stop": 2940})["code"] == "SL_NOT_TIGHTER"
     assert ex.tighten_stop({"symbol": "ETHUSD", "stop": 3000.5})["code"] == "SL_WRONG_SIDE"  # above ETH bid 3000
-    assert ex.tighten_stop({"symbol": "DOGEUSD", "stop": 1})["code"] == "SYMBOL_NOT_ALLOWED"
+    assert ex.tighten_stop({"symbol": "DOGEUSD", "stop": 1})["code"] == "SYMBOL_NOT_LISTED"
 
 
 def test_tighten_without_symbol_targets_btc_even_when_eth_auto_exists(tmp_path):
@@ -333,10 +344,15 @@ def test_tighten_without_symbol_targets_btc_even_when_eth_auto_exists(tmp_path):
     assert d["code"] == "MODIFIED" and d["position"]["id"] == "B"
 
 
-def test_tighten_position_id_on_non_allowed_symbol_not_found(tmp_path):
+def test_tighten_position_id_on_any_symbol_unless_denied(tmp_path):
     pos = [position("X", symbol="XAUUSD", open_price=4000.0, stop_loss=3950.0, take_profit=4200.0)]
-    ex = _ex(tmp_path, multi_broker(positions=pos))
-    assert ex.tighten_stop({"position_id": "X", "stop": 3960})["code"] == "POSITION_NOT_FOUND"
+    b = multi_broker(positions=pos)
+    b.set_symbol("XAUUSD", spec=SPEC, quote={"bid": 4100.0, "ask": 4100.5})
+    ex = _ex(tmp_path, b)
+    d = ex.tighten_stop({"position_id": "X", "stop": 3960})
+    assert d["code"] == "MODIFIED" and d["symbol"] == "XAUUSD"
+    ex2 = _ex(tmp_path / "b", b, env={"AUTOEXEC_SYMBOLS": "BTCUSD,ETHUSD"})
+    assert ex2.tighten_stop({"position_id": "X", "stop": 3960})["code"] == "POSITION_NOT_FOUND"
 
 
 # ---------------------------------------------------------------- dry-run, logging, caches, status
@@ -377,7 +393,7 @@ def test_spec_cache_is_per_symbol(tmp_path):
 
 
 def test_status_reports_every_symbol(tmp_path):
-    ex = _ex(tmp_path, env={"AUTOEXEC_COMMISSION_PER_LOT_ROUNDTRIP_SOLUSD": ""})
+    ex = _ex(tmp_path, env={"AUTOEXEC_COMMISSION_PER_LOT_ROUNDTRIP_SOLUSD": "", "AUTOEXEC_STATUS_SYMBOLS": "ETHUSD,SOLUSD"})
     s = ex.status()
     per = s["guards"]["per_symbol"]
     assert list(per) == ["BTCUSD", "ETHUSD", "SOLUSD"]
@@ -385,7 +401,7 @@ def test_status_reports_every_symbol(tmp_path):
     assert per["ETHUSD"]["description"] == "Ethereum vs US Dollar"
     assert per["SOLUSD"]["commission"]["source"] == "none"
     assert per["BTCUSD"]["commission"]["per_lot_roundtrip"] == 27.0
-    assert s["guards"]["symbols"] == ["BTCUSD", "ETHUSD", "SOLUSD"]
+    assert s["guards"]["active_symbols"] == ["BTCUSD", "ETHUSD", "SOLUSD"]
 
 
 def test_http_and_cli_accept_symbol(tmp_path, monkeypatch, capsys):

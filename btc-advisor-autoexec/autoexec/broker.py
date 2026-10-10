@@ -117,6 +117,24 @@ class MetaApiRest:
         pos = self._request("GET", self._acct("/positions"))
         return pos if isinstance(pos, list) else []
 
+    def symbols(self) -> List[str]:
+        """Symbols the broker lists for this account (MetaAPI ``GET .../symbols``)."""
+
+        syms = self._request("GET", self._acct("/symbols"))
+        if isinstance(syms, dict):
+            syms = syms.get("symbols") or syms.get("data") or []
+        return [str(x) for x in syms] if isinstance(syms, list) else []
+
+    def calculate_margin(self, symbol: str, order_type: str, volume: float, open_price: float) -> Dict[str, Any]:
+        """Broker-side margin for a hypothetical order (MetaAPI ``POST .../calculate-margin``).
+
+        Read-only computation; it does not place anything.
+        """
+
+        body = {"symbol": symbol, "type": order_type, "volume": float(volume), "openPrice": float(open_price)}
+        res = self._request("POST", self._acct("/calculate-margin"), body)
+        return res if isinstance(res, dict) else {"raw": res}
+
     def symbol_specification(self, symbol: str) -> Dict[str, Any]:
         spec = self._request("GET", self._acct(f"/symbols/{urllib.parse.quote(symbol)}/specification"))
         return spec if isinstance(spec, dict) else {}

@@ -1,6 +1,7 @@
 # btc-advisor-autoexec
 
-Execution endpoint for FTMO BTC Advisor setups on BTCUSD, ETHUSD and SOLUSD. **Order placement is DISABLED by
+Execution endpoint for FTMO Advisor setups on any symbol the FTMO broker lists
+(crypto CFDs, indices, metals, FX); `symbol` defaults to BTCUSD. **Order placement is DISABLED by
 default** (`AUTOEXEC_ORDERS_ENABLED=0`). In dry-run every guard runs against live
 read-only MetaAPI data (account, positions, quote, symbol spec, today's deals), the
 would-be order is logged, and nothing is sent.
@@ -18,11 +19,18 @@ Authorization
   [Guard 3](#3-position-count-and-the-second-position-rule).
 - Multi-symbol 17:07 ET: ETHUSD and SOLUSD alongside BTCUSD on the same account; same
   per-trade guards per symbol from each symbol's own spec/quote/commission; the $500 daily
-  cap, the $90,750 halt and the kill switch are account-wide; 2 positions total across the
-  three symbols (manual + auto). See [Symbols](#symbols).
+  cap, the $90,750 halt and the kill switch are account-wide.
+- Any symbol 19:07 ET: any symbol the broker lists, validated live against MetaAPI's
+  symbol list and a complete specification; a **margin cap on every entry** (projected
+  margin level >= 200 %, lots shrink, else skip); **commission as a percentage of
+  notional** (0.065 % per round trip = 0.0325 %/side default, crypto only; other classes need broker/deals data or an
+  explicit value); position limit and breakeven rule **account-wide** (every open position,
+  all symbols, manual and auto, incl. other engines); `/symbol` endpoint; preflight for a
+  symbol list. See [Symbols](#symbols), [Margin cap](#margin-cap-every-entry) and
+  [Commission models](#commission-models).
 
 Target: FTMO login `541458001`, MetaAPI account `a60dfd98-8a34-4c1b-9f2c-b40cdcc2c3bf`,
-symbols `BTCUSD`, `ETHUSD`, `SOLUSD` (default `BTCUSD`), London client host `https://mt-client-api-v1.london.agiliumtrade.ai`
+any broker-listed symbol (default `BTCUSD`), London client host `https://mt-client-api-v1.london.agiliumtrade.ai`
 (the same REST host/transport pattern as the crawl-back package). All configurable via env.
 
 Nothing here touches `modules/entry_guard.py`, `modules/book_sync.py`, `metaapi_hub/`
@@ -60,8 +68,9 @@ btc-advisor-autoexec/
 |--------|------------|----------------------------------------------------------------------|---------|
 | GET    | `/health`  | –                                                                    | liveness, arming flags; no broker call |
 | GET    | `/status`  | –                                                                    | read-only guard states from live data |
-| POST   | `/setup`   | `{"symbol":"BTCUSD|ETHUSD|SOLUSD","side":"BUY|SELL","entry_type":"MARKET","stop":<px>,"target":<px>}` + optional `request_id`, `dry_run:true`. `symbol` defaults to `BTCUSD`; unknown symbols are rejected (`SYMBOL_NOT_ALLOWED`). | entry decision |
-| POST   | `/tighten` | `{"stop":<px>}` + optional `symbol` (default `BTCUSD`), `position_id` (any allowed symbol), `request_id`, `dry_run:true` | tighten an auto position's stop |
+| POST   | `/setup`   | `{"symbol":"<broker symbol>","side":"BUY|SELL","entry_type":"MARKET","stop":<px>,"target":<px>}` + optional `request_id`, `dry_run:true`. `symbol` defaults to `BTCUSD`; it must pass the env allow/deny lists (`SYMBOL_NOT_ALLOWED`), be in the broker's live list (`SYMBOL_NOT_LISTED`) and have a complete spec (`SPEC_UNAVAILABLE` / `SPEC_INCOMPLETE`). | entry decision |
+| POST   | `/tighten` | `{"stop":<px>}` + optional `symbol` (default `BTCUSD`), `position_id` (auto position on any symbol), `request_id`, `dry_run:true` | tighten an auto position's stop |
+| GET    | `/symbol`  | `?symbol=XAUUSD[,US100.cash][&stop_distance=25][&side=BUY]` | read-only per-symbol report (see below) |
 
 If `AUTOEXEC_API_KEY` is set, every request must send `X-Autoexec-Key`.
 
@@ -71,7 +80,7 @@ cooldown, …), and for entries `lots`, `risk_usd`, `per_lot_loss`, `spread`,
 `spread_cost_per_lot`, `commission_per_lot_roundtrip`, `commission_source`,
 `stop_distance`, `reward_risk`, `sizing`, `commission`, `order` (the payload that was
 or would be sent), `broker_response` when something was sent, and `second_position`
-when a position on an allowed symbol was already open.
+when any position was already open on the account.
 
 ```bash
 curl -s -XPOST 127.0.0.1:8787/setup -d '{"side":"BUY","entry_type":"MARKET","stop":84500,"target":86500}'            # BTCUSD
@@ -89,6 +98,7 @@ python3 -m autoexec serve
 python3 -m autoexec setup [--symbol ETHUSD] --side BUY --entry-type MARKET --stop 84500 --target 86500 [--dry-run]
 python3 -m autoexec tighten [--symbol ETHUSD] --stop 84800 [--position-id ID] [--dry-run]
 python3 -m autoexec status
+python3 -m autoexec symbol XAUUSD US100.cash [--stop-distance 25] [--side BUY]
 python3 -m autoexec kill | unkill          # kill file on/off
 python3 -m autoexec halt-clear --yes       # manual re-enable after an equity halt
 ```
@@ -103,24 +113,32 @@ python3 -m autoexec halt-clear --yes       # manual re-enable after an equity ha
 | `AUTOEXEC_TOKEN_SOURCE` | `/home/solveetcoagula/odin_ftmo/config_us100.json` | JSON file with `metaapi.token` (or `metaapi_token`). |
 | `AUTOEXEC_ACCOUNT_ID` | `a60dfd98-8a34-4c1b-9f2c-b40cdcc2c3bf` | MetaAPI account id. |
 | `AUTOEXEC_EXPECTED_LOGIN` | `541458001` | Broker login that `account-information` must report; mismatch refuses everything. |
-| `AUTOEXEC_SYMBOL` | `BTCUSD` | Default symbol when a request has no `symbol`. Must be in `AUTOEXEC_SYMBOLS`. |
-| `AUTOEXEC_SYMBOLS` | `BTCUSD,ETHUSD,SOLUSD` | Allowed symbols (broker names, case-sensitive as written). |
-| `AUTOEXEC_SECOND_POSITION_SCOPE` | `allowed` | Which symbols' open positions count for the position limit and the second-position rule: `allowed` (the set above) or `all` (every open position on the account). |
+| `AUTOEXEC_SYMBOL` | `BTCUSD` | Default symbol when a request has no `symbol`. |
+| `AUTOEXEC_SYMBOLS` | *(empty)* | Optional **allowlist**. Empty = every symbol the broker lists. |
+| `AUTOEXEC_SYMBOLS_DENY` | *(empty)* | Optional denylist. |
+| `AUTOEXEC_STATUS_SYMBOLS` | *(empty)* | Extra symbols to report in `/status` (default symbol, allowlist and open-position symbols are always included). |
+| `AUTOEXEC_SECOND_POSITION_SCOPE` | `all` | `all` = every open position on the account counts (Odin 19:07 ET); `allowed` = allowlist symbols only. |
+| `AUTOEXEC_SAMPLE_STOP_PCT` | `1.0` | Default sample stop distance for `/symbol` / preflight, as % of price. |
 | `AUTOEXEC_CLIENT_HOST` | `https://mt-client-api-v1.london.agiliumtrade.ai` | MetaAPI client REST host. |
 | `AUTOEXEC_ORDERS_ENABLED` | `0` | **Arming flag.** `1` allows `/trade` calls. |
 | `AUTOEXEC_KILL` | `0` | Kill switch (env). |
 | `AUTOEXEC_KILL_FILE` | `<state_dir>/KILL` | Kill switch (file). Presence blocks every entry and modify, no restart needed. |
 | `AUTOEXEC_MAX_RISK_USD` | `250` | Guard 2. |
-| `AUTOEXEC_COMMISSION_PER_LOT_ROUNDTRIP` | `27` | Fallback round-trip commission per 1.0 lot **for BTCUSD only** (Odin's advisor figure). |
-| `AUTOEXEC_COMMISSION_PER_LOT_ROUNDTRIP_<SYMBOL>` | unset | Per-symbol fallback, e.g. `..._ETHUSD`, `..._SOLUSD`. No default: without it and without a broker/deals-derived value the entry is skipped (`COMMISSION_UNAVAILABLE`). |
+| `AUTOEXEC_COMMISSION_PCT_PER_SIDE` | `0.0325` | Percentage-of-notional commission per side (round trip = 2 × rate × contractSize × fill price = 0.065 % per round trip). Default model for **crypto** only. Rate decided by Odin 2026-10-10 19:30 ET from Trading Ops' measured $54.31/lot round trip on ~83.5k notional. |
+| `AUTOEXEC_COMMISSION_PCT_PER_SIDE_<SYMBOL|CLASS>` | unset | Per-symbol or per-class rate (`_CRYPTO`, `_FOREX`, `_INDEX`, `_METALS`). |
+| `AUTOEXEC_COMMISSION_PER_LOT_ROUNDTRIP_<SYMBOL>` | unset | Flat per-lot round trip for a symbol (selects the `flat` model). |
+| `AUTOEXEC_COMMISSION_PER_LOT_ROUNDTRIP` | `27` | Legacy flat BTCUSD figure (Odin 05:47 ET); used only when BTCUSD resolves to the `flat` model (no asset class from the broker, or `AUTOEXEC_COMMISSION_MODEL_BTCUSD=flat`). |
+| `AUTOEXEC_COMMISSION_MODEL_<SYMBOL|CLASS>` | per class, see "Confirmed per-asset commission defaults" | `pct` or `flat` per symbol or class. Unknown groups have **no default**: broker/deals data or an explicit value, else `COMMISSION_UNAVAILABLE`. |
+| `AUTOEXEC_ASSET_CLASS_<SYMBOL>` | unset | Override the class derived from the broker's group/name (`crypto|forex|metals|index|oil|equity|energy|dollar_index|agri`). |
 | `AUTOEXEC_COMMISSION_SOURCE` | `auto` | `auto` (spec → deals → env), or pin `spec` / `deals` / `env`. Pinned sources with no data fail closed. |
 | `AUTOEXEC_COMMISSION_LOOKBACK_DAYS` | `30` | Window for the deals-derived commission. |
 | `AUTOEXEC_MAX_POSITIONS_TOTAL` | `2` | Guard 3 (values above 2 are refused). |
 | `AUTOEXEC_SECOND_POSITION_MIN_RR` | `2.0` | Guard 3 condition 2. |
 | `AUTOEXEC_MIN_MARGIN_LEVEL_PCT` | `200` | Guard 3 condition 4. |
-| `AUTOEXEC_MARGIN_PER_LOT_USD` | unset | Margin estimate override (per 1.0 lot) for BTCUSD. |
-| `AUTOEXEC_SYMBOL_LEVERAGE` | unset | Margin estimate for BTCUSD: notional / leverage. |
-| `AUTOEXEC_MARGIN_PER_LOT_USD_<SYMBOL>` / `AUTOEXEC_SYMBOL_LEVERAGE_<SYMBOL>` | unset | Per-symbol margin calibration (`..._ETHUSD`, `..._SOLUSD`). Unknown → second entries on that symbol are skipped. |
+| `AUTOEXEC_MARGIN_CALC_BROKER` | `1` | Use MetaAPI `calculate-margin` (broker-reported) as the first margin source. |
+| `AUTOEXEC_MARGIN_PER_LOT_USD[_<SYMBOL>]` | unset | Margin calibration override per 1.0 lot (un-suffixed = BTCUSD). |
+| `AUTOEXEC_SYMBOL_LEVERAGE[_<SYMBOL>]` | unset | Margin calibration: notional / leverage (un-suffixed = BTCUSD). |
+| `AUTOEXEC_MIN_MARGIN_LEVEL_PCT` | `200` | Margin cap on every entry and second-position condition 4. |
 | `AUTOEXEC_MARGIN_USE_ACCOUNT_LEVERAGE` | `0` | Opt-in last-resort margin estimate from `account.leverage`. |
 | `AUTOEXEC_DAILY_LOSS_CAP_USD` | `500` | Guard 5. |
 | `AUTOEXEC_DAY_TZ` | `Europe/Prague` | FTMO day boundary. |
@@ -137,34 +155,128 @@ python3 -m autoexec halt-clear --yes       # manual re-enable after an equity ha
 
 ## Symbols
 
-Authorization: Odin, 2026-10-10 17:07 ET.
+Authorization: Odin 17:07 ET (ETH/SOL) and 19:07 ET (any broker-listed symbol).
 
-- `/setup` and the CLI take `symbol`; absent → `BTCUSD`, so BTC behaviour is unchanged
-  when no symbol is given. Unknown symbols → `SYMBOL_NOT_ALLOWED` before any live read.
-- Every per-trade guard is evaluated per symbol from **that symbol's own** MetaAPI
-  specification (`contractSize`, `tickSize`, `tickValue`, `minVolume`, `volumeStep`) and
-  live quote: $250 sizing incl. that symbol's spread and round-trip commission, lots
-  rounded down to that symbol's step, skip if its minimum lot exceeds $250, MARKET only,
-  SL + TP required, stops only tighten.
-- Commission is resolved per symbol (spec → that symbol's closed round trips in the
-  lookback → per-symbol env fallback). The un-suffixed `AUTOEXEC_COMMISSION_PER_LOT_ROUNDTRIP`
-  is BTCUSD's. ETH/SOL values are **not** guessed: set
-  `AUTOEXEC_COMMISSION_PER_LOT_ROUNDTRIP_ETHUSD` / `_SOLUSD` from the broker's figures or
-  the entry is skipped with `COMMISSION_UNAVAILABLE`.
-- Account-wide: the $500 daily cap (closed + floating + commissions on every auto-magic
-  trade on any symbol), the $90,750 equity-halt latch, the kill switch, the post-place
-  cooldown.
-- Position limit: 2 open positions total across the allowed symbols, manual + auto. A
-  second entry on any symbol requires every open position on every allowed symbol to have
-  its SL at breakeven or better, and the rest of Guard 3 is evaluated combined across
-  symbols (each existing position valued at its stop with its own symbol's tick value;
-  averaging-down = same symbol **and** same side in floating loss; shared daily-cap room;
-  equity buffer; margin level with per-symbol calibration).
-- `/tighten`: `symbol` selects the auto position (default `BTCUSD`); `position_id` finds an
-  auto position on any allowed symbol. The side check uses that symbol's live quote.
-- Caches and retry from the reliability fix apply per symbol (spec cache keyed by symbol;
-  one shared lookback read serves every symbol's deals-derived commission).
+- `/setup`, `/tighten`, `/symbol` and the CLI take `symbol`; absent → `BTCUSD`.
+- Validation, in order: env allow/deny lists (`SYMBOL_NOT_ALLOWED`); the broker's live symbol
+  list from MetaAPI (`SYMBOL_NOT_LISTED`; canonical case comes from the list; if the list
+  cannot be read the spec read decides and the failure is logged `symbol_list_unavailable`);
+  the specification must be readable (`SPEC_UNAVAILABLE`) and expose `contractSize`,
+  `tickSize`, `minVolume` and `volumeStep` (`SPEC_INCOMPLETE`, listing the missing fields);
+  a tick value must be derivable (`TICK_VALUE_UNAVAILABLE`, see Guard 2). No spec value is
+  ever guessed.
+- Every per-trade guard is evaluated from **that symbol's own** spec and live quote: $250
+  sizing incl. that symbol's spread and round-trip commission, lots floored to its step, skip
+  if its minimum lot exceeds $250, MARKET only, SL + TP required, stops only tighten.
+- Account-wide: the $500 daily cap (closed + floating + commissions on every auto-magic trade
+  on any symbol), the $90,750 equity-halt latch, the kill switch, the post-place cooldown,
+  the position limit and the margin cap.
+- Caches and retry from the reliability fix apply per symbol (symbol list and spec cached per
+  the spec TTL, quotes always fresh, one shared commission-lookback read, `/symbol` views
+  cached per the status TTL).
 - `symbol` is logged on every decision line, including rejections.
+
+## Margin cap (every entry)
+
+Authorization: Odin 19:07 ET #3. After any entry, first or second, the projected margin level
+`equity / (account.margin + margin_per_lot × lots) × 100` must be **>= 200 %**
+(`AUTOEXEC_MIN_MARGIN_LEVEL_PCT`). Lots are shrunk, floored to the volume step, until it
+holds (`margin.cap.capped: true`, the reason is appended to `sizing.reason`); if even the
+minimum lot breaks it the entry is skipped (`MARGIN_CAP_SKIP`). If the margin per lot cannot
+be computed the entry is skipped (`MARGIN_UNKNOWN`). The estimate and its method are in
+`margin` on every decision.
+
+Margin per lot, first available wins (`margin.per_lot.method`):
+1. `metaapi.calculate-margin` — broker-reported margin for the sized volume via MetaAPI
+   `POST .../calculate-margin` (read-only), divided by that volume.
+2. `AUTOEXEC_MARGIN_PER_LOT_USD[_<SYMBOL>]` override.
+3. `spec.initialMargin` when > 0 and in the account currency.
+4. notional / `AUTOEXEC_SYMBOL_LEVERAGE[_<SYMBOL>]`.
+5. notional / `account.leverage`, opt-in only.
+Hedged-margin relief is ignored (conservative).
+
+## Commission models
+
+Authorization: Odin 19:07 ET #4. Per symbol, `auto` resolves: a commission field on the spec
+(broker) → closed round trips of that symbol in the lookback (deals-derived) → the configured
+model. Models:
+- `pct`: round trip = 2 × `AUTOEXEC_COMMISSION_PCT_PER_SIDE` (0.0325 %, i.e. 0.065 % per round trip) × contractSize × fill
+  price, in account currency (a symbol quoted in another currency is `COMMISSION_UNAVAILABLE`
+  under `pct`; no FX conversion is attempted). **Default for crypto only** (Trading Ops
+  measured FTMO crypto round trips at this rate).
+- `flat`: `AUTOEXEC_COMMISSION_PER_LOT_ROUNDTRIP_<SYMBOL>` per 1.0 lot.
+- Groups without a confirmed default (see the table below) have no model: without
+  broker/deals data or an explicit per-symbol value (or `AUTOEXEC_COMMISSION_MODEL_<CLASS>` +
+  rate) the entry is skipped with `COMMISSION_UNAVAILABLE` naming the variables to set.
+The decision reports `commission.asset_class`, `commission.model`, `commission.source`,
+`pct_per_side`, `notional_per_lot`.
+
+### Asset-class map (broker group + symbol name)
+
+Case-insensitive on the first segment of the broker's spec `path` (the MT5 group), with
+symbol-name exceptions inside shared groups; slash names (`XAU/USD`) are normalised to
+`XAUUSD`. `AUTOEXEC_ASSET_CLASS_<SYMBOL>` overrides everything.
+
+| Class | Matches |
+|---|---|
+| `crypto` | groups containing `Crypto` — `Crypto`, `Crypto CFD`, `Crypto II CFD` (e.g. UNIUSD) |
+| `forex` | `Forex`, `Exotics`, `FX`, `Currencies` |
+| `metals` | `Metals CFD`, `Metals`, `Gold`, `Silver` |
+| `index` | `Cash CFD` (e.g. US100.cash, US30.cash), `Indices` |
+| `oil` | by name: `USOIL.cash`, `UKOIL.cash` (inside `Cash CFD`) |
+| `energy` | by name: `NATGAS.cash`, `HEATOIL.c` |
+| `dollar_index` | by name: `DXY.cash` |
+| `equity` | `Equities CFD`, `Stocks`, `Shares` |
+| `agri` | `Agricultural`, or any other `*.c` name (COCOA.c, CORN.c, SUGAR.c …) |
+| *(none)* | anything else → no default commission |
+
+### Confirmed per-asset commission defaults
+
+Sources: FTMO official trading updates (Jul–Sep 2025) and FTMO's official symbols data
+(`https://ftmo.com/wp-json/ftmo/symbols`, behind `ftmo.com/en/symbols`, last modified
+2026-10-08 — its figures are round trip, exactly 2× the per-side rates), reconciled with this
+account's broker deals measured by Trading Ops on 2026-10-10 (BTC $27.17/side over 306 round
+trips; FX $2.508/side; US100.cash $0.00 over 2 round trips; no metals deals yet). Decision
+delegated to the implementer by Odin (19:30 ET). Broker/deals-derived values still take
+precedence when available.
+
+| Class | Default | Published / measured |
+|---|---|---|
+| `crypto` | `pct` **0.0325 %/side** (`AUTOEXEC_COMMISSION_PCT_PER_SIDE`) | page 0.065 % round trip; measured $27.17/side |
+| `forex` | `flat` **$5.02** round trip | page $5 round trip ($2.50/side); measured $2.508/side |
+| `metals` | `pct` **0.0007 %/side** | page 0.0014 % round trip; no deals yet — no padded flat guess |
+| `index` | `flat` **$0** | page zero; measured $0.00 on US100.cash |
+| `oil` | `flat` **$0** | page zero (USOIL.cash, UKOIL.cash) |
+| `equity` | `pct` **0.002 %/side** | page 0.004 % round trip |
+| `energy` | `pct` **0.0007 %/side** | page 0.0014 % round trip (NATGAS.cash, HEATOIL.c) |
+| `dollar_index` | `pct` **0.0007 %/side** | page 0.0014 % round trip (DXY.cash) |
+| `agri` | `flat` **$0** | page zero (COCOA.c, CORN.c, SUGAR.c …) |
+| other | none | skip with `COMMISSION_UNAVAILABLE` unless env set |
+
+Per-class overrides: `AUTOEXEC_COMMISSION_MODEL_<CLASS>`, `AUTOEXEC_COMMISSION_PCT_PER_SIDE_<CLASS>`,
+`AUTOEXEC_COMMISSION_PER_LOT_ROUNDTRIP_<CLASS>` (class names as in the table, e.g. `_DOLLAR_INDEX`).
+
+### Env-variable names for symbols with dots
+
+Per-symbol variables accept the exact broker name or an upper-cased form with non-alphanumerics
+replaced by `_`: `AUTOEXEC_COMMISSION_PER_LOT_ROUNDTRIP_US100.cash`,
+`..._US100_CASH` and `..._us100.cash` all address `US100.cash` (systemd `Environment=`
+accepts dots; a POSIX shell does not, so use the underscore form there). A flat commission of
+**`0` is a valid, set value** (e.g. indices), not `COMMISSION_UNAVAILABLE`; only an empty
+value means unset.
+
+**Rate decision (Odin, 2026-10-10 19:30 ET, delegated after Trading Ops' measured data):**
+the crypto `pct` commission is **0.065 % of notional per round trip = 0.0325 % per side**.
+Trading Ops measured **$54.31 per lot round trip on ~83.5k BTC notional**
+(54.31 / 83,500 = 0.065 %).
+
+**BTCUSD numeric difference from the flat $27 (documented per Odin's request).** At 85,020
+the `pct` model gives 2 × 0.0325 % × 85,020 = **$55.26** round trip per lot versus the legacy
+flat **$27**. On the reference setup (520-point stop, 20-point spread): flat $27 → per-lot
+loss 567 → 0.44 lots; `pct` → per-lot loss 595.26 → 250 / 595.26 = 0.41998 → **0.41 lots**
+after the floor to the 0.01 step (about 0.42; exactly 0.42 with the measured $54.31 at
+~83.5k notional). When the broker reports no asset class for BTCUSD the legacy flat $27 still
+applies (identical to #85).
 
 ## Guards (server-side, in evaluation order)
 
@@ -181,14 +293,28 @@ without both.
 
 ### 2. Risk sizing ($250 max incl. costs)
 ```
-value_per_unit = lossTickValue|profitTickValue|tickValue / tickSize   (else contractSize; else fail closed)
+value_per_unit = tick value / tickSize
+   tick value   = quote.lossTickValue (current-price quote; conservative loss side)
+                  else a spec tick value (lossTickValue | profitTickValue | tickValue)
+                  else contractSize x tickSize ONLY if the symbol's profit currency == account currency
+                  else fail closed (TICK_VALUE_UNAVAILABLE)
 stop_distance  = ask - stop  (BUY, fills at ask)   |   stop - bid  (SELL, fills at bid)
 per_lot_loss   = stop_distance * value_per_unit + (ask - bid) * value_per_unit + commission_roundtrip
 lots           = floor_to_step(250 / per_lot_loss, volumeStep), capped at maxVolume
 risk_usd       = lots * per_lot_loss
 ```
 If `lots < minVolume` the entry is skipped (`SKIP_MIN_VOLUME`). Spread, commission (and
-its source), and per-lot loss are logged on every decision, including rejected ones.
+its source), per-lot loss and `value_source` are logged on every decision, including
+rejected ones.
+
+**Tick value source (Trading Ops preflight at b54c805, 2026-10-10):** on this account
+MetaAPI returns `tickValue`/`lossTickValue` as **null in the symbol specification**; tick
+values are only present in the current-price quote (`lossTickValue` / `profitTickValue`).
+Sizing therefore takes `quote.lossTickValue` first, then a spec tick value, then
+`contractSize × tickSize` only for symbols quoted in the account currency (the #84–#86
+behaviour for USD-quoted symbols); otherwise it fails closed. Spec completeness no longer
+requires a tick value in the spec (`contractSize`, `tickSize`, `minVolume`, `volumeStep`
+remain required).
 
 Commission source (`commission_source` in every decision):
 1. `spec` – a commission field on the MetaAPI symbol specification, if the broker exposes one
@@ -199,8 +325,9 @@ Commission source (`commission_source` in every decision):
 3. `env` – `AUTOEXEC_COMMISSION_PER_LOT_ROUNDTRIP` (default 27).
 
 ### 3. Position count and the second-position rule
-All open positions on the allowed symbols (`BTCUSD`, `ETHUSD`, `SOLUSD`) count, manual
-(magic 0) and auto alike, combined.
+**Every open position on the account counts** — all symbols, manual (magic 0), auto and
+other engines (e.g. the gold engine's XAUUSD) — with `AUTOEXEC_SECOND_POSITION_SCOPE=all`
+(default since 19:07 ET; `allowed` restricts to the allowlist).
 
 - 0 open: normal single-entry guards.
 - ≥ `AUTOEXEC_MAX_POSITIONS_TOTAL` (2) open: `MAX_POSITIONS`.
@@ -209,30 +336,20 @@ All open positions on the allowed symbols (`BTCUSD`, `ETHUSD`, `SOLUSD`) count, 
 
 | # | Condition | Reject code |
 |---|---|---|
-| 1 | Every existing position on every allowed symbol has SL at breakeven or better (long: `SL >= openPrice`; short: `SL <= openPrice`; missing/zero SL fails). | `SECOND_SL_NOT_BREAKEVEN` |
+| 1 | Every open position on the account has SL at breakeven or better (long: `SL >= openPrice`; short: `SL <= openPrice`; missing/zero SL fails). | `SECOND_SL_NOT_BREAKEVEN` |
 | 1 | Combined open risk at SL ≤ $250: Σ existing `max(0, directional distance openPrice→SL) × that symbol's value per unit × volume` (0 at breakeven+) + the new trade's `risk_usd` (which already includes spread + round-trip commission). | `SECOND_COMBINED_RISK` |
 | 2 | New setup reward:risk ≥ 2.0 after costs. `reward_per_lot = (target − ask) × value − spread_cost − commission` (BUY; mirrored for SELL); ratio = `reward_per_lot / per_lot_loss`. | `SECOND_RR_TOO_LOW` |
 | 2 | Never averaging down: no existing position on the **same symbol and same side** with MetaAPI `profit < 0`. | `SECOND_AVERAGING_DOWN` |
 | 3 | Combined open risk ≤ remaining daily-cap room, `room = 500 − max(0, −(closed + floating today))`. | `SECOND_DAILY_ROOM` |
 | 3 | `equity − combined open risk > 90,750`. | `SECOND_EQUITY_BUFFER` |
-| 4 | Projected margin level `equity / (account.margin + new_margin) × 100 > 200 %`. | `SECOND_MARGIN_LEVEL` / `SECOND_MARGIN_UNKNOWN` |
-| 5 | Max 2 positions total across the allowed symbols. | `MAX_POSITIONS` |
+| 4 | Projected margin level `equity / (account.margin + new_margin) × 100 >= 200 %` (already enforced by the margin cap; re-verified here). | `SECOND_MARGIN_LEVEL` / `SECOND_MARGIN_UNKNOWN` |
+| 5 | Max 2 positions total on the account. | `MAX_POSITIONS` |
 
 **Limitation:** "fresh setup" cannot be verified server-side. The decision carries
 `fresh_setup_verified: false`; the advisor is responsible for that judgement.
 
-**Margin estimate method** (condition 4), first available wins, else the second entry is
-skipped with `SECOND_MARGIN_UNKNOWN`:
-1. `AUTOEXEC_MARGIN_PER_LOT_USD × lots` (explicit override, from preflight observation).
-2. `spec.initialMargin × lots` when `initialMargin > 0` and `marginCurrency` equals the
-   account currency.
-3. `lots × contractSize × fill_price / AUTOEXEC_SYMBOL_LEVERAGE`.
-4. Only if `AUTOEXEC_MARGIN_USE_ACCOUNT_LEVERAGE=1`: `lots × contractSize × fill_price /
-   account.leverage` (crypto leverage on FTMO usually differs from the account leverage,
-   so this is opt-in).
-Hedged-margin relief is ignored (projected margin is treated as additive — conservative).
-The preflight prints the estimate alongside the account's live `margin`/`marginLevel` so
-Trading Ops can calibrate `AUTOEXEC_SYMBOL_LEVERAGE` or `AUTOEXEC_MARGIN_PER_LOT_USD`.
+**Margin estimate method** (condition 4): see [Margin cap](#margin-cap-every-entry); the
+same per-lot estimate is used.
 
 After any live place attempt (success, broker rejection, or transport error with unknown
 fill state) entries are blocked for `AUTOEXEC_POST_PLACE_COOLDOWN_SEC`
@@ -325,13 +442,24 @@ With `AUTOEXEC_ORDERS_ENABLED=0` (default) or the kill switch on, `/setup` and
 sent. `broker.trade()` is not called. A request can also force dry-run while armed with
 `"dry_run": true` (HTTP) or `--dry-run` (CLI).
 
-## Preflight (read-only)
+## /symbol and the preflight (read-only)
+
+`GET /symbol?symbol=XAUUSD&stop_distance=25` (or `python3 -m autoexec symbol XAUUSD`) returns,
+per symbol: `broker_symbol`, `description`, `path`, `currencies`, `spec` and `spec_missing`,
+`quote` (bid/ask/spread in price and `spread_cost_per_lot_usd`), `asset_class` and the model it
+selects, `commission` (model/source/value per lot round trip, rate, notional),
+`margin` (per lot and method), `sample` (stop distance, sizing, margin cap, resulting lots and
+risk) and `ok` / `reason` (`pass`, or the skip code with its reason). Several symbols:
+`symbol=A,B,C`. Cached per `AUTOEXEC_STATUS_CACHE_SEC`. `/status` carries the same view for
+the active symbols under `guards.per_symbol`.
 
 ```bash
 cd /home/solveetcoagula/odin_ftmo/btc-advisor-autoexec     # or wherever Trading Ops checks it out
 AUTOEXEC_TOKEN_SOURCE=/home/solveetcoagula/odin_ftmo/config_us100.json \
-python3 scripts/preflight.py --stop-distance 500          # add --json for machine output
+python3 scripts/preflight.py --symbols UNIUSD,US100.cash,XAUUSD --stop-pct 1   # or --stop-distance 25
 ```
+Prints the account-wide guard states and, per symbol, the `/symbol` view with **PASS/FAIL
+and the reason**; exit code 0 when all pass, 2 otherwise; `--json` for machine output.
 Prints login/equity/margin and the account-wide guard states (halt latch, shared daily
 cap, position count by symbol, cooldown, kill, orders flag), then **for each allowed
 symbol**: the broker's symbol name / description / path, the raw spec and derived value
@@ -345,7 +473,7 @@ hypothetical second entry. The broker object is wrapped so `trade()` cannot be r
 cd btc-advisor-autoexec
 python3 -m pytest tests -q
 ```
-208 tests with a fake MetaAPI broker; no network, no token file. Coverage per mechanic:
+289 tests with a fake MetaAPI broker; no network, no token file. Coverage per mechanic:
 sizing incl. spread + commission and floor to step, skip when min lot > $250, non-market
 rejected, missing SL/TP rejected, max-2 total, every second-position condition (accept
 and reject paths, incl. margin unknown/level/override/spec), tighten-only accept and
@@ -426,14 +554,13 @@ Each is left configurable with a safe default rather than guessed (mirrored in t
 12. **Magic number** default `20261010`; **token source** default
     `/home/solveetcoagula/odin_ftmo/config_us100.json` (`metaapi.token`). Confirm both
     (the token must have access to account `a60dfd98-…`).
-13. **ETHUSD / SOLUSD commission and margin** (needs broker confirmation): no values are
-    hard-coded. Trading Ops must read them from the broker/preflight and set
-    `AUTOEXEC_COMMISSION_PER_LOT_ROUNDTRIP_ETHUSD/_SOLUSD` and
-    `AUTOEXEC_SYMBOL_LEVERAGE_ETHUSD/_SOLUSD` (or `AUTOEXEC_MARGIN_PER_LOT_USD_…`); until
-    then ETH/SOL entries skip (`COMMISSION_UNAVAILABLE`) and ETH/SOL second entries skip
-    (`SECOND_MARGIN_UNKNOWN`).
-14. **Scope of the position limit.** Positions on symbols outside the allowed set (e.g.
-    XAUUSD from the gold engine) do not count by default; `AUTOEXEC_SECOND_POSITION_SCOPE=all`
-    makes every open position count. Confirm which is intended.
-15. **Order comment** stays `BTC_ADVISOR_AUTO` on ETH/SOL orders (the magic is the
-    identity). Confirm or set `AUTOEXEC_COMMENT`.
+13. **Per-asset-class confirmation (Trading Ops, before arming a class):**
+    commission defaults are confirmed per class (see the table); confirm the broker's group
+    `path` strings match the map (the preflight prints `asset_class.source`), and set a
+    per-symbol value for anything that lands in "other";
+    margin — confirm MetaAPI `calculate-margin` works on this account (the preflight prints the
+    method), else set `AUTOEXEC_SYMBOL_LEVERAGE_<SYMBOL>` / `AUTOEXEC_MARGIN_PER_LOT_USD_<SYMBOL>`.
+14. **Scope** is account-wide by default (19:07 ET); `AUTOEXEC_SECOND_POSITION_SCOPE=allowed`
+    is the opt-out.
+15. **Order comment** stays `BTC_ADVISOR_AUTO` on every symbol (the magic is the identity).
+    Confirm or set `AUTOEXEC_COMMENT`.

@@ -18,11 +18,11 @@ position (manual + auto counted together) is allowed only if ALL hold:
    down). "Fresh setup" cannot be verified server-side.
 3. Combined open risk at SL fits within the remaining daily-cap room, and
    equity minus combined open risk stays above the $90,750 halt.
-4. Projected margin level after entry stays above 200 %. Required margin is
-   estimated from an explicit per-lot override, else the spec's
-   ``initialMargin``, else notional / symbol leverage (env), else (opt-in)
-   notional / account leverage. If none is available the entry is skipped.
-5. Max 2 BTC positions in total.
+4. Projected margin level after entry stays >= 200 %. Since 19:07 ET the same
+   bound is enforced on every entry by :mod:`autoexec.margin` (broker
+   calculate-margin first, then calibration env); this check re-verifies it.
+5. Max 2 positions in total, account-wide (every open position, all symbols,
+   manual and auto, incl. other engines) since 19:07 ET.
 
 Definitions used here (documented in the README):
 
@@ -281,6 +281,19 @@ def estimate_margin(
     return MarginEstimate(new_margin, method, acct_margin, equity, projected, level, detail)
 
 
+def margin_estimate_from_per_lot(*, per_lot_usd: Optional[Decimal], method: str, lots: Decimal, account: Dict[str, Any], detail: Optional[Dict[str, Any]] = None) -> MarginEstimate:
+    """Build the second-position margin view from a per-lot estimate (see :mod:`autoexec.margin`)."""
+
+    equity = _num(account.get("equity")) or Decimal("0")
+    acct_margin = _num(account.get("margin")) or Decimal("0")
+    if per_lot_usd is None:
+        return MarginEstimate(None, method, acct_margin, equity, None, None, dict(detail or {}))
+    new_margin = per_lot_usd * lots
+    projected = acct_margin + new_margin
+    level = (equity / projected * 100) if projected > 0 else None
+    return MarginEstimate(new_margin, method, acct_margin, equity, projected, level, dict(detail or {}))
+
+
 def check_margin_level(est: MarginEstimate, *, min_level_pct: Decimal) -> None:
     if est.new_margin_usd is None:
         raise Rejected(
@@ -290,9 +303,9 @@ def check_margin_level(est: MarginEstimate, *, min_level_pct: Decimal) -> None:
         )
     if est.projected_level_pct is None:
         raise Rejected("SECOND_MARGIN_UNKNOWN", "projected margin is zero; cannot compute a margin level", margin=est.as_dict())
-    if est.projected_level_pct <= min_level_pct:
+    if est.projected_level_pct < min_level_pct:
         raise Rejected(
             "SECOND_MARGIN_LEVEL",
-            f"projected margin level {est.projected_level_pct.quantize(Decimal('0.1'))}% is not above {min_level_pct}%",
+            f"projected margin level {est.projected_level_pct.quantize(Decimal('0.1'))}% is below {min_level_pct}%",
             margin=est.as_dict(),
         )
