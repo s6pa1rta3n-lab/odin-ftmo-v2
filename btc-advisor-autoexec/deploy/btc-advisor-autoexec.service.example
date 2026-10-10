@@ -1,0 +1,65 @@
+# EXAMPLE ONLY. Orders are DISABLED in this file and must stay disabled in git.
+#
+# Authorization: Odin James, Strategy Implementer chat, 2026-10-10 05:45 ET
+# (build as draft, orders disabled by default; Trading Ops deploys/arms/rolls back).
+#
+# Trading Ops installs this on the VM only after Odin's OK. Arming is a separate,
+# deliberate step on the VM (a drop-in that sets AUTOEXEC_ORDERS_ENABLED=1), never
+# a change to this committed file. See README.md "Arm" and "Rollback".
+#
+# Kill switch: `touch /home/solveetcoagula/btc-advisor-autoexec/state/KILL`
+# (or AUTOEXEC_KILL=1) blocks every entry and modify without stopping the unit.
+
+[Unit]
+Description=BTC Advisor auto-execution endpoint (ORDERS DISABLED - dry-run)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=solveetcoagula
+WorkingDirectory=/home/solveetcoagula/odin_ftmo/btc-advisor-autoexec
+
+# --- target (configurable) ---
+Environment=AUTOEXEC_ACCOUNT_ID=a60dfd98-8a34-4c1b-9f2c-b40cdcc2c3bf
+Environment=AUTOEXEC_EXPECTED_LOGIN=541458001
+Environment=AUTOEXEC_SYMBOL=BTCUSD
+Environment=AUTOEXEC_CLIENT_HOST=https://mt-client-api-v1.london.agiliumtrade.ai
+# Token comes from this file (metaapi.token); never from the unit, never logged.
+Environment=AUTOEXEC_TOKEN_SOURCE=/home/solveetcoagula/odin_ftmo/config_us100.json
+
+# --- arming: DISABLED. Do not change this line in git. ---
+Environment=AUTOEXEC_ORDERS_ENABLED=0
+Environment=AUTOEXEC_KILL=0
+
+# --- approved guard values (defaults; shown for visibility) ---
+Environment=AUTOEXEC_MAX_RISK_USD=250
+Environment=AUTOEXEC_DAILY_LOSS_CAP_USD=500
+Environment=AUTOEXEC_EQUITY_HALT_USD=90750
+Environment=AUTOEXEC_COMMISSION_PER_LOT_ROUNDTRIP=27
+Environment=AUTOEXEC_COMMISSION_SOURCE=auto
+Environment=AUTOEXEC_MAX_POSITIONS_TOTAL=2
+Environment=AUTOEXEC_SECOND_POSITION_MIN_RR=2.0
+Environment=AUTOEXEC_MIN_MARGIN_LEVEL_PCT=200
+# Margin estimate for the second-position rule. Leave unset to skip second
+# entries until Trading Ops confirms a value from the preflight output.
+# Environment=AUTOEXEC_SYMBOL_LEVERAGE=2
+# Environment=AUTOEXEC_MARGIN_PER_LOT_USD=
+
+# --- identity, files, interface ---
+Environment=AUTOEXEC_MAGIC=20261010
+Environment=AUTOEXEC_COMMENT=BTC_ADVISOR_AUTO
+Environment=AUTOEXEC_STATE_DIR=/home/solveetcoagula/btc-advisor-autoexec/state
+Environment=AUTOEXEC_LOG_PATH=/home/solveetcoagula/btc-advisor-autoexec/state/autoexec.jsonl
+Environment=AUTOEXEC_BIND_HOST=127.0.0.1
+Environment=AUTOEXEC_BIND_PORT=8787
+# Environment=AUTOEXEC_API_KEY=   # set via a drop-in, not here
+
+ExecStart=/usr/bin/python3 -m autoexec serve
+Restart=on-failure
+RestartSec=5
+StandardOutput=append:/home/solveetcoagula/btc-advisor-autoexec/state/autoexec.stdout.log
+StandardError=append:/home/solveetcoagula/btc-advisor-autoexec/state/autoexec.stdout.log
+
+[Install]
+WantedBy=multi-user.target
