@@ -1,8 +1,8 @@
 """CLI equivalent of the HTTP endpoint.
 
     python3 -m autoexec serve
-    python3 -m autoexec setup --side BUY --entry-type MARKET --stop 84000 --target 88000 [--dry-run]
-    python3 -m autoexec tighten --stop 85500 [--position-id ID] [--dry-run]
+    python3 -m autoexec setup [--symbol ETHUSD] --side BUY --entry-type MARKET --stop 84000 --target 88000 [--dry-run]
+    python3 -m autoexec tighten [--symbol ETHUSD] --stop 85500 [--position-id ID] [--dry-run]
     python3 -m autoexec status
     python3 -m autoexec kill            # create the kill file (blocks every mutation)
     python3 -m autoexec unkill          # remove the kill file
@@ -48,6 +48,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     sub.add_parser("serve", help="run the local HTTP endpoint")
 
     p_setup = sub.add_parser("setup", help="submit an entry setup")
+    p_setup.add_argument("--symbol", help="BTCUSD (default), ETHUSD or SOLUSD; must be in AUTOEXEC_SYMBOLS")
     p_setup.add_argument("--side", required=True, choices=["BUY", "SELL", "buy", "sell"])
     p_setup.add_argument("--entry-type", default="MARKET")
     p_setup.add_argument("--stop", required=True)
@@ -56,6 +57,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     p_setup.add_argument("--dry-run", action="store_true", help="force dry-run even if orders are enabled")
 
     p_t = sub.add_parser("tighten", help="tighten the auto position's stop")
+    p_t.add_argument("--symbol", help="symbol of the auto position (default BTCUSD); or pass --position-id")
     p_t.add_argument("--stop", required=True)
     p_t.add_argument("--position-id")
     p_t.add_argument("--request-id")
@@ -113,6 +115,8 @@ def main(argv: Optional[List[str]] = None) -> int:
             "stop": args.stop,
             "target": args.target,
         }
+        if args.symbol:
+            payload["symbol"] = args.symbol
         if args.request_id:
             payload["request_id"] = args.request_id
         decision = executor.decide_entry(payload, force_dry_run=args.dry_run)
@@ -120,6 +124,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         return 0 if decision.get("accepted") else 2
     if args.cmd == "tighten":
         payload: Dict[str, Any] = {"stop": args.stop}
+        if args.symbol:
+            payload["symbol"] = args.symbol
         if args.position_id:
             payload["position_id"] = args.position_id
         if args.request_id:

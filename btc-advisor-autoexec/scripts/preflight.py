@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """Read-only preflight for Trading Ops. Places nothing, modifies nothing.
 
-Prints: account login/equity/margin, symbol specification, live quote and
-spread, commission source resolution, lot math for a sample stop distance,
-the second-position margin estimate for that sample, and every guard state
-(halt latch, daily cap, position count, kill switch, orders flag).
+Prints, for every allowed symbol (BTCUSD, ETHUSD, SOLUSD by default): the
+broker's symbol name and description, the specification, live quote and
+spread, commission source and value, lot math for a sample stop distance and
+the second-position margin estimate; plus every account-wide guard state
+(halt latch, shared daily cap, position count, kill switch, orders flag).
 
     python3 scripts/preflight.py                 # sample stop distance 500 price units
     python3 scripts/preflight.py --stop-distance 350
@@ -26,7 +27,6 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."
 
 from autoexec import second_position as second  # noqa: E402
 from autoexec.broker import MetaApiRest  # noqa: E402
-from autoexec.commission import resolve_commission  # noqa: E402
 from autoexec.config import Config, load_token  # noqa: E402
 from autoexec.engine import Executor  # noqa: E402
 from autoexec.guards import parse_quote  # noqa: E402
@@ -69,23 +69,25 @@ def main() -> int:
     reads = status["reads"]
     guards = status["guards"]
     out["guards"] = guards
-    out["spec_raw"] = reads.get("spec_raw")
 
-    sample = {"stop_distance": args.stop_distance}
-    try:
-        spec = parse_spec(reads["spec_raw"])
-        quote = parse_quote(reads["quote_raw"])
-        comm = resolve_commission(
-            mode=cfg.commission_source,
-            env_value=D(cfg.commission_per_lot_roundtrip),
-            spec=reads["spec_raw"],
-            deals=reads.get("deals_lookback"),
-            symbol=cfg.symbol,
-        )
-        sample["commission"] = comm.as_dict()
-        if comm.per_lot_roundtrip is None:
-            sample["error"] = comm.note
-        else:
+    def sample_for(symbol: str) -> dict:
+        """Lot math and margin estimate for one symbol at the sample stop distance. Never raises."""
+
+        sample: dict = {"symbol": symbol, "stop_distance": args.stop_distance}
+        spec_raw = reads["specs"].get(symbol)
+        quote_raw = reads["quotes"].get(symbol)
+        try:
+            if spec_raw is None or quote_raw is None:
+                raise RuntimeError("no spec/quote read for this symbol")
+            sample["broker_symbol"] = spec_raw.get("symbol")
+            sample["description"] = spec_raw.get("description")
+            spec = parse_spec(spec_raw)
+            quote = parse_quote(quote_raw)
+            comm = executor._commission_for(symbol, spec_raw, reads.get("deals_lookback"))
+            sample["commission"] = comm.as_dict()
+            if comm.per_lot_roundtrip is None:
+                sample["error"] = comm.note
+                return sample
             sizing = size_position(
                 stop_distance=D(args.stop_distance),
                 spread=quote.spread,
@@ -95,20 +97,26 @@ def main() -> int:
             )
             sample["sizing"] = sizing.as_dict()
             lots = sizing.lots if sizing.lots > 0 else spec.min_volume
+            margin_override = cfg.margin_per_lot_for(symbol)
+            leverage = cfg.symbol_leverage_for(symbol)
             margin = second.estimate_margin(
                 lots=lots,
                 fill_price=quote.ask,
-                spec_raw=reads["spec_raw"],
+                spec_raw=spec_raw,
                 spec=spec,
                 account=reads["account"],
-                margin_per_lot_override=D(cfg.margin_per_lot_usd) if cfg.margin_per_lot_usd else None,
-                symbol_leverage=D(cfg.symbol_leverage) if cfg.symbol_leverage else None,
+                margin_per_lot_override=D(margin_override) if margin_override else None,
+                symbol_leverage=D(leverage) if leverage else None,
                 use_account_leverage=cfg.margin_use_account_leverage,
             )
             sample["margin_estimate_for_second_position"] = margin.as_dict()
-    except Exception as exc:  # keep the preflight informative even when one piece fails
-        sample["error"] = f"{type(exc).__name__}: {exc}"
-    out["sample"] = sample
+        except Exception as exc:  # keep the preflight informative even when one piece fails
+            sample["error"] = f"{type(exc).__name__}: {exc}"
+        return sample
+
+    out["sample"] = sample_for(cfg.symbol)
+    out["samples"] = {sym: sample_for(sym) for sym in cfg.symbols}
+    out["spec_raw_by_symbol"] = reads.get("specs")
 
     if args.json:
         print(json.dumps(redact(out), indent=2, default=str))
@@ -128,21 +136,28 @@ def main() -> int:
         for p in guards["book"][kind]:
             print(f"   [{kind}] {p}")
     print(f"cooldown        : {guards['post_place_cooldown']}")
-    q = guards.get("quote") or {}
-    print(f"quote           : bid={q.get('bid')} ask={q.get('ask')} spread={q.get('spread')}")
-    print(f"spec            : {json.dumps(guards.get('spec'), default=str)}")
-    print(f"commission      : {json.dumps(guards.get('commission'), default=str)}")
-    print(f"sample stop dist: {args.stop_distance}")
-    if "sizing" in sample:
-        s = sample["sizing"]
-        print(f"   per-lot loss = stop {s['stop_loss_per_lot']} + spread {s['spread_cost_per_lot']} + commission {s['commission_per_lot_roundtrip']} = {s['per_lot_loss']}")
-        print(f"   lots = floor({cfg.max_risk_usd} / {s['per_lot_loss']}, step {s['volume_step']}) = {s['lots']}  risk=${s['risk_usd']}  ok={s['ok']} ({s['reason']})")
-        m = sample["margin_estimate_for_second_position"]
-        level = m["projected_level_pct"]
-        level_txt = f"{level:.1f}%" if isinstance(level, (int, float)) else "n/a"
-        print(f"   margin est.  : new={m['new_margin_usd']} method={m['method']} projected_level={level_txt} (min {cfg.min_margin_level_pct}%)")
-    else:
-        print(f"   sizing error : {sample.get('error')}")
+    print(f"symbols         : allowed={list(cfg.symbols)} default={cfg.symbol} second_position_scope={cfg.second_position_scope}")
+    print(f"sample stop dist: {args.stop_distance} (price units, same for every symbol)")
+    for sym in cfg.symbols:
+        view = (guards.get("per_symbol") or {}).get(sym, {})
+        smp = out["samples"][sym]
+        q = view.get("quote") or {}
+        print(f"-- {sym} --")
+        print(f"   broker symbol: {view.get('broker_symbol')}  description: {view.get('description')}  path: {view.get('path')}")
+        print(f"   quote        : bid={q.get('bid')} ask={q.get('ask')} spread={q.get('spread')}")
+        print(f"   spec         : {json.dumps(view.get('spec'), default=str)}")
+        print(f"   commission   : {json.dumps(view.get('commission'), default=str)}")
+        print(f"   margin calib : {json.dumps(view.get('margin_calibration'), default=str)}")
+        if "sizing" in smp:
+            sz = smp["sizing"]
+            print(f"   per-lot loss = stop {sz['stop_loss_per_lot']} + spread {sz['spread_cost_per_lot']} + commission {sz['commission_per_lot_roundtrip']} = {sz['per_lot_loss']}")
+            print(f"   lots = floor({cfg.max_risk_usd} / {sz['per_lot_loss']}, step {sz['volume_step']}) = {sz['lots']}  risk=${sz['risk_usd']}  ok={sz['ok']} ({sz['reason']})")
+            m = smp["margin_estimate_for_second_position"]
+            level = m["projected_level_pct"]
+            level_txt = f"{level:.1f}%" if isinstance(level, (int, float)) else "n/a"
+            print(f"   margin est.  : new={m['new_margin_usd']} method={m['method']} projected_level={level_txt} (min {cfg.min_margin_level_pct}%)")
+        else:
+            print(f"   sizing       : SKIP -> {smp.get('error')}")
     print("No orders were placed. No positions were modified.")
     return 0
 

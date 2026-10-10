@@ -21,7 +21,7 @@ import time
 import uuid
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
 from . import guards
 from . import second_position as second
@@ -68,7 +68,7 @@ class Executor:
         self.retry_policy.validate()
         # In-memory caches (never persisted; the state-file format is unchanged).
         self._cache_lock = threading.Lock()
-        self._spec_cache: Optional[Tuple[float, Dict[str, Any]]] = None
+        self._spec_cache: Dict[str, Tuple[float, Dict[str, Any]]] = {}  # per symbol
         self._lookback_cache: Optional[Tuple[float, List[Dict[str, Any]]]] = None
         self._status_cache: Optional[Tuple[float, Optional[Dict[str, Any]], Optional[Rejected]]] = None
 
@@ -104,11 +104,59 @@ class Executor:
         with self._cache_lock:
             setattr(self, slot, (self.monotonic_fn(), value))
 
+    def _cached_spec(self, symbol: str) -> Optional[Dict[str, Any]]:
+        with self._cache_lock:
+            entry = self._spec_cache.get(symbol)
+        if entry is None or self.cfg.spec_cache_sec <= 0:
+            return None
+        if self.monotonic_fn() - entry[0] >= self.cfg.spec_cache_sec:
+            return None
+        return entry[1]
+
+    def _store_spec(self, symbol: str, spec: Dict[str, Any]) -> None:
+        with self._cache_lock:
+            self._spec_cache[symbol] = (self.monotonic_fn(), spec)
+
+    def _spec_for(self, symbol: str, cache_hits: Optional[List[str]] = None) -> Dict[str, Any]:
+        """Symbol specification with the per-symbol cache and 429/5xx retry."""
+
+        spec = self._cached_spec(symbol)
+        if spec is None:
+            spec = self._retry(f"symbol_specification({symbol})", lambda: self.broker.symbol_specification(symbol))
+            self._store_spec(symbol, spec)
+        elif cache_hits is not None:
+            cache_hits.append(f"symbol_specification({symbol})")
+        return spec
+
+    def _quote_for(self, symbol: str) -> Dict[str, Any]:
+        return self._retry(f"current_price({symbol})", lambda: self.broker.current_price(symbol))
+
     def invalidate_caches(self) -> None:
         with self._cache_lock:
-            self._spec_cache = None
+            self._spec_cache = {}
             self._lookback_cache = None
             self._status_cache = None
+
+    # ------------------------------------------------------------------ symbols
+
+    def resolve_symbol(self, payload: Dict[str, Any]) -> str:
+        """Symbol from the request, defaulting to the configured default (BTCUSD). Unknown -> Rejected."""
+
+        raw = payload.get("symbol") if isinstance(payload, dict) else None
+        if raw is None or str(raw).strip() == "":
+            return self.cfg.symbol
+        symbol = self.cfg.canonical_symbol(raw)
+        if symbol is None:
+            raise Rejected("SYMBOL_NOT_ALLOWED", f"symbol {raw!r} is not in the allowed set {list(self.cfg.symbols)}")
+        return symbol
+
+    def _scope_symbols(self) -> Optional[List[str]]:
+        """Symbols whose positions count for the position limit / second-position rule (None = all)."""
+
+        return None if self.cfg.second_position_scope == "all" else list(self.cfg.symbols)
+
+    def _book(self, positions: List[Dict[str, Any]]) -> guards.Book:
+        return guards.classify_positions(positions, symbols=self._scope_symbols(), magic=self.cfg.magic, comment=self.cfg.comment)
 
     @property
     def armed(self) -> bool:
@@ -119,28 +167,31 @@ class Executor:
 
     # ------------------------------------------------------------------ reads
 
-    def _read_all(self, *, need_spec: bool, need_deals: bool) -> Dict[str, Any]:
-        """Every read the guards need. Raises Rejected(READ_FAILED) on any failure."""
+    def _read_all(self, *, symbol: Optional[str] = None, need_spec: bool, need_deals: bool, extra_symbols: Sequence[str] = ()) -> Dict[str, Any]:
+        """Every read the guards need. Raises Rejected(READ_FAILED) on any failure.
 
+        ``quote_raw``/``spec_raw`` are for ``symbol`` (default: the configured default
+        symbol); ``quotes``/``specs`` additionally hold ``extra_symbols``.
+        """
+
+        symbol = symbol or self.cfg.symbol
         now = self._now()
-        out: Dict[str, Any] = {"now": now}
+        out: Dict[str, Any] = {"now": now, "symbol": symbol, "quotes": {}, "specs": {}}
         cache_hits: List[str] = []
         step = "account_information"
         try:
             out["account"] = self._retry(step, self.broker.account_information)
             step = "positions"
             out["positions"] = self._retry(step, self.broker.positions)
-            step = "current_price"
-            out["quote_raw"] = self._retry(step, lambda: self.broker.current_price(self.cfg.symbol))
+            for sym in [symbol] + [x for x in extra_symbols if x != symbol]:
+                step = f"current_price({sym})"
+                out["quotes"][sym] = self._quote_for(sym)
+                if need_spec:
+                    step = f"symbol_specification({sym})"
+                    out["specs"][sym] = self._spec_for(sym, cache_hits)
+            out["quote_raw"] = out["quotes"][symbol]
             if need_spec:
-                step = "symbol_specification"
-                spec = self._cached("_spec_cache", self.cfg.spec_cache_sec)
-                if spec is None:
-                    spec = self._retry(step, lambda: self.broker.symbol_specification(self.cfg.symbol))
-                    self._store("_spec_cache", spec)
-                else:
-                    cache_hits.append(step)
-                out["spec_raw"] = spec
+                out["spec_raw"] = out["specs"][symbol]
             if need_deals:
                 day_start, day_end = day_window_utc(now, self.zone)
                 out["day_start"], out["day_end"] = day_start, day_end
@@ -158,9 +209,46 @@ class Executor:
             out["cache_hits"] = cache_hits
         except BrokerError as exc:
             raise Rejected("READ_FAILED", f"live read failed at {step}: {exc}", step=step)
+        except Rejected:
+            raise
         except Exception as exc:  # malformed payloads, etc.
             raise Rejected("READ_FAILED", f"live read failed at {step}: {type(exc).__name__}: {exc}", step=step)
         return out
+
+    def _commission_for(self, symbol: str, spec_raw: Optional[Dict[str, Any]], deals_lookback: Optional[List[Dict[str, Any]]]):
+        env_value = self.cfg.commission_env_for(symbol)
+        return resolve_commission(
+            mode=self.cfg.commission_source,
+            env_value=D(env_value) if env_value is not None else None,
+            spec=spec_raw,
+            deals=deals_lookback,
+            symbol=symbol,
+        )
+
+    def _symbol_view(self, symbol: str, quote_raw: Optional[Dict[str, Any]], spec_raw: Optional[Dict[str, Any]], deals_lookback: Optional[List[Dict[str, Any]]]) -> Dict[str, Any]:
+        """Per-symbol quote/spec/commission summary for /status and the preflight. Does not raise."""
+
+        view: Dict[str, Any] = {"symbol": symbol}
+        if quote_raw is not None:
+            try:
+                q = guards.parse_quote(quote_raw)
+                view["quote"] = {"bid": float(q.bid), "ask": float(q.ask), "spread": float(q.spread)}
+            except Rejected as exc:
+                view["quote"] = {"error": exc.reason}
+        if spec_raw is not None:
+            view["broker_symbol"] = spec_raw.get("symbol")
+            view["description"] = spec_raw.get("description")
+            view["path"] = spec_raw.get("path")
+            try:
+                view["spec"] = parse_spec(spec_raw).as_dict()
+            except SizingError as exc:
+                view["spec"] = {"error": str(exc)}
+            view["commission"] = self._commission_for(symbol, spec_raw, deals_lookback).as_dict()
+        view["margin_calibration"] = {
+            "margin_per_lot_usd": self.cfg.margin_per_lot_for(symbol),
+            "symbol_leverage": self.cfg.symbol_leverage_for(symbol),
+        }
+        return view
 
     def _check_login(self, account: Dict[str, Any]) -> None:
         login = str(account.get("login") or "")
@@ -182,8 +270,16 @@ class Executor:
         today = trading_day(now, self.zone).isoformat()
         account = reads.get("account") or {}
         positions = reads.get("positions") or []
-        book = guards.classify_positions(positions, symbol=self.cfg.symbol, magic=self.cfg.magic, comment=self.cfg.comment)
+        symbol = reads.get("symbol") or self.cfg.symbol
+        book = self._book(positions)
+        auto_all = guards.auto_positions(positions, magic=self.cfg.magic, comment=self.cfg.comment)
+        per_symbol_open = {}
+        for p in guards.all_symbol_positions(book):
+            per_symbol_open[p.get("symbol")] = per_symbol_open.get(p.get("symbol"), 0) + 1
         state: Dict[str, Any] = {
+            "symbol": symbol,
+            "symbols": list(self.cfg.symbols),
+            "second_position_scope": self.cfg.second_position_scope,
             "trading_day": today,
             "day_tz": self.cfg.day_tz,
             "login": account.get("login"),
@@ -199,6 +295,8 @@ class Executor:
             "manual_open": len(book.manual),
             "other_magic_open": len(book.other),
             "total_open": len(guards.all_symbol_positions(book)),
+            "open_by_symbol": per_symbol_open,
+            "auto_open_all_symbols": len(auto_all),
             "max_positions_total": self.cfg.max_positions_total,
             "daily_cap_usd": self.cfg.daily_loss_cap_usd,
             "daily_cap_latched_day": self.state.daily_cap_hit_day(),
@@ -209,7 +307,7 @@ class Executor:
             "post_place_cooldown": self._cooldown_state(now),
         }
         if "deals_today" in reads:
-            pnl = guards.daily_pnl(reads["deals_today"], book.auto, magic=self.cfg.magic, comment=self.cfg.comment)
+            pnl = guards.daily_pnl(reads["deals_today"], auto_all, magic=self.cfg.magic, comment=self.cfg.comment)
             state["daily_pnl"] = pnl.as_dict()
             state["day_window_utc"] = [reads["day_start"].isoformat(), reads["day_end"].isoformat()]
         if "quote_raw" in reads:
@@ -223,14 +321,14 @@ class Executor:
                 state["spec"] = parse_spec(reads["spec_raw"]).as_dict()
             except SizingError as exc:
                 state["spec"] = {"error": str(exc)}
-            res = resolve_commission(
-                mode=self.cfg.commission_source,
-                env_value=D(self.cfg.commission_per_lot_roundtrip),
-                spec=reads.get("spec_raw"),
-                deals=reads.get("deals_lookback"),
-                symbol=self.cfg.symbol,
-            )
-            state["commission"] = res.as_dict()
+            state["commission"] = self._commission_for(symbol, reads.get("spec_raw"), reads.get("deals_lookback")).as_dict()
+        quotes = reads.get("quotes") or {}
+        specs = reads.get("specs") or {}
+        if quotes or specs:
+            state["per_symbol"] = {
+                sym: self._symbol_view(sym, quotes.get(sym), specs.get(sym), reads.get("deals_lookback"))
+                for sym in sorted(set(quotes) | set(specs), key=lambda x: (x != symbol, x))
+            }
         return state
 
     def _cooldown_state(self, now: datetime) -> Dict[str, Any]:
@@ -256,7 +354,7 @@ class Executor:
             reads = None
             age = 0.0
             try:
-                reads = self._read_all(need_spec=True, need_deals=True)
+                reads = self._read_all(symbol=self.cfg.symbol, need_spec=True, need_deals=True, extra_symbols=self.cfg.symbols)
             except Rejected as exc:
                 error = exc
                 self.log.emit("status_read_failed", code=exc.code, reason=exc.reason, step=exc.detail.get("step"), cached_for_sec=ttl, alert=True)
@@ -305,13 +403,16 @@ class Executor:
         }
         self.log.emit("request", decision_id=decision_id, action="ENTRY", mode=mode, request=payload)
         reads: Dict[str, Any] = {}
+        symbol = self.cfg.symbol
         try:
+            symbol = self.resolve_symbol(payload)
+            decision["symbol"] = symbol
             setup = guards.parse_setup(payload)
-            decision["setup"] = {"side": setup.side, "entry_type": setup.entry_type, "stop": float(setup.stop), "target": float(setup.target), "request_id": setup.request_id}
+            decision["setup"] = {"symbol": symbol, "side": setup.side, "entry_type": setup.entry_type, "stop": float(setup.stop), "target": float(setup.target), "request_id": setup.request_id}
             if self.cfg.kill_active:
                 raise Rejected("KILL_SWITCH", "kill switch is active; no mutations")
 
-            reads = self._read_all(need_spec=True, need_deals=True)
+            reads = self._read_all(symbol=symbol, need_spec=True, need_deals=True)
             now: datetime = reads["now"]
             gs = self.guard_state(reads)
             decision["guards"] = gs
@@ -333,13 +434,14 @@ class Executor:
             cd = gs["post_place_cooldown"]
             if cd.get("active"):
                 raise Rejected("POST_PLACE_COOLDOWN", f"a place attempt happened {self.cfg.post_place_cooldown_sec - cd['remaining_sec']:.0f}s ago; waiting for the book to settle", cooldown=cd)
-            book = guards.classify_positions(reads["positions"], symbol=self.cfg.symbol, magic=self.cfg.magic, comment=self.cfg.comment)
+            book = self._book(reads["positions"])
             existing_positions = guards.all_symbol_positions(book)
             second.check_max_positions(len(existing_positions), max_total=self.cfg.max_positions_total)
 
-            # #5 daily cap (closed + floating, by magic), Prague day
+            # #5 shared daily cap (closed + floating on every auto-magic trade, any symbol), Prague day
             today = trading_day(now, self.zone).isoformat()
-            pnl = guards.daily_pnl(reads["deals_today"], book.auto, magic=self.cfg.magic, comment=self.cfg.comment)
+            auto_all = guards.auto_positions(reads["positions"], magic=self.cfg.magic, comment=self.cfg.comment)
+            pnl = guards.daily_pnl(reads["deals_today"], auto_all, magic=self.cfg.magic, comment=self.cfg.comment)
             try:
                 guards.check_daily_cap(pnl, cap_usd=D(self.cfg.daily_loss_cap_usd), today_iso=today, latched_day=self.state.daily_cap_hit_day())
             except Rejected as exc:
@@ -354,16 +456,10 @@ class Executor:
             quote = guards.parse_quote(reads["quote_raw"])
             stop_distance = guards.check_levels(setup, quote)
             spec = parse_spec(reads["spec_raw"])
-            comm = resolve_commission(
-                mode=self.cfg.commission_source,
-                env_value=D(self.cfg.commission_per_lot_roundtrip),
-                spec=reads["spec_raw"],
-                deals=reads.get("deals_lookback"),
-                symbol=self.cfg.symbol,
-            )
+            comm = self._commission_for(symbol, reads["spec_raw"], reads.get("deals_lookback"))
             decision["commission"] = comm.as_dict()
             if comm.per_lot_roundtrip is None:
-                raise Rejected("COMMISSION_UNAVAILABLE", comm.note)
+                raise Rejected("COMMISSION_UNAVAILABLE", comm.note, symbol=symbol)
             sizing = size_position(
                 stop_distance=stop_distance,
                 spread=quote.spread,
@@ -394,6 +490,7 @@ class Executor:
             # #3 second-position rule (only when a BTC position is already open)
             if existing_positions:
                 decision["second_position"] = self._check_second_position(
+                    symbol=symbol,
                     existing_positions=existing_positions,
                     setup=setup,
                     quote=quote,
@@ -408,7 +505,7 @@ class Executor:
             # Build the order: SL and TP attached in the same request, always.
             order = {
                 "actionType": "ORDER_TYPE_BUY" if setup.side == "BUY" else "ORDER_TYPE_SELL",
-                "symbol": self.cfg.symbol,
+                "symbol": symbol,
                 "volume": float(sizing.lots),
                 "stopLoss": float(setup.stop),
                 "takeProfit": float(setup.target),
@@ -434,7 +531,8 @@ class Executor:
             decision["reason"] = exc.reason
             if exc.detail:
                 decision["detail"] = exc.detail
-            self._attach_informational_sizing(decision, reads, payload)
+            decision.setdefault("symbol", str((payload or {}).get("symbol") or symbol) if isinstance(payload, dict) else symbol)
+            self._attach_informational_sizing(decision, reads, payload, symbol)
             self.log.emit("decision", **self._loggable(decision))
             return decision
         except SizingError as exc:
@@ -446,6 +544,7 @@ class Executor:
     def _check_second_position(
         self,
         *,
+        symbol: str,
         existing_positions: List[Dict[str, Any]],
         setup: guards.Setup,
         quote: guards.Quote,
@@ -456,27 +555,47 @@ class Executor:
         spec: Any,
         reads: Dict[str, Any],
     ) -> Dict[str, Any]:
-        """Evaluate every second-position condition; raises Rejected on the first failure.
+        """Evaluate every second-position condition combined across symbols; raises Rejected on the first failure.
 
         The returned dict is attached to the decision so the guard values are logged
         even when the entry is accepted.
         """
 
-        existing = [second.existing_position_risk(p, sizing.value_per_unit_per_lot) for p in existing_positions]
+        # Each existing position's risk at SL uses ITS OWN symbol's value per price unit.
+        values: Dict[str, Decimal] = {symbol: sizing.value_per_unit_per_lot}
+        for p in existing_positions:
+            sym = str(p.get("symbol") or "")
+            if sym in values:
+                continue
+            spec_raw = reads["specs"].get(sym)
+            try:
+                if spec_raw is None:
+                    spec_raw = self._spec_for(sym, reads.get("cache_hits"))
+                    reads["specs"][sym] = spec_raw
+                values[sym] = parse_spec(spec_raw).value_per_unit_per_lot
+            except BrokerError as exc:
+                raise Rejected("READ_FAILED", f"live read failed at symbol_specification({sym}): {exc}", step=f"symbol_specification({sym})")
+            except SizingError as exc:
+                raise Rejected("SECOND_SPEC_UNAVAILABLE", f"cannot value the open {sym} position at its stop: {exc}", symbol=sym)
+        existing = [second.existing_position_risk(p, values[str(p.get("symbol") or "")]) for p in existing_positions]
         combined = second.combined_open_risk(existing, sizing.risk_usd)
         room = second.daily_cap_room(pnl, cap_usd=D(self.cfg.daily_loss_cap_usd))
         fill_price = quote.ask if setup.side == "BUY" else quote.bid
+        margin_override = self.cfg.margin_per_lot_for(symbol)
+        leverage = self.cfg.symbol_leverage_for(symbol)
         margin = second.estimate_margin(
             lots=sizing.lots,
             fill_price=fill_price,
             spec_raw=reads["spec_raw"],
             spec=spec,
             account=reads["account"],
-            margin_per_lot_override=D(self.cfg.margin_per_lot_usd) if self.cfg.margin_per_lot_usd else None,
-            symbol_leverage=D(self.cfg.symbol_leverage) if self.cfg.symbol_leverage else None,
+            margin_per_lot_override=D(margin_override) if margin_override else None,
+            symbol_leverage=D(leverage) if leverage else None,
             use_account_leverage=self.cfg.margin_use_account_leverage,
         )
         info = {
+            "symbol": symbol,
+            "scope": self.cfg.second_position_scope,
             "existing": [e.as_dict() for e in existing],
             "new_risk_usd": float(sizing.risk_usd),
             "combined_open_risk_usd": float(combined),
@@ -488,16 +607,16 @@ class Executor:
             "fresh_setup_verified": False,
         }
         try:
-            # 1. breakeven-or-better on every existing position; combined risk <= $250
+            # 1. breakeven-or-better on every existing position (any symbol); combined risk <= $250
             second.check_all_breakeven(existing)
             second.check_combined_risk(combined, max_risk_usd=D(self.cfg.max_risk_usd))
-            # 2. R:R >= 2 after costs; never averaging down
+            # 2. R:R >= 2 after costs; never averaging down (same symbol, same side)
             second.check_reward_risk(rr, min_rr=D(self.cfg.second_position_min_rr))
-            second.check_no_averaging_down(existing, setup.side)
-            # 3. daily-cap room and equity buffer above the halt
+            second.check_no_averaging_down(existing, setup.side, symbol)
+            # 3. shared daily-cap room and equity buffer above the halt
             second.check_daily_room(combined, room=room)
             second.check_equity_buffer(equity, combined, halt_usd=D(self.cfg.equity_halt_usd))
-            # 4. projected margin level
+            # 4. projected margin level (per-symbol calibration)
             second.check_margin_level(margin, min_level_pct=D(self.cfg.min_margin_level_pct))
         except Rejected as exc:
             exc.detail.setdefault("second_position", info)
@@ -535,14 +654,14 @@ class Executor:
     def _post_place_sync(self, decision: Dict[str, Any]) -> None:
         try:
             positions = self.broker.positions()
-            book = guards.classify_positions(positions, symbol=self.cfg.symbol, magic=self.cfg.magic, comment=self.cfg.comment)
+            book = self._book(positions)
             decision["post_place_book"] = book.summary()
             self.log.emit("post_place_sync", decision_id=decision["decision_id"], book=book.summary())
         except Exception as exc:
             decision["post_place_book"] = {"error": str(exc)}
             self.log.emit("post_place_sync_failed", decision_id=decision["decision_id"], error=str(exc))
 
-    def _attach_informational_sizing(self, decision: Dict[str, Any], reads: Dict[str, Any], payload: Dict[str, Any]) -> None:
+    def _attach_informational_sizing(self, decision: Dict[str, Any], reads: Dict[str, Any], payload: Dict[str, Any], symbol: str) -> None:
         """Best-effort spread/commission/per-lot-loss on rejected decisions (mechanic #2 logging)."""
 
         if "sizing" in decision or not reads.get("quote_raw") or not reads.get("spec_raw"):
@@ -552,13 +671,7 @@ class Executor:
             quote = guards.parse_quote(reads["quote_raw"])
             stop_distance = guards.check_levels(setup, quote)
             spec = parse_spec(reads["spec_raw"])
-            comm = resolve_commission(
-                mode=self.cfg.commission_source,
-                env_value=D(self.cfg.commission_per_lot_roundtrip),
-                spec=reads["spec_raw"],
-                deals=reads.get("deals_lookback"),
-                symbol=self.cfg.symbol,
-            )
+            comm = self._commission_for(symbol, reads["spec_raw"], reads.get("deals_lookback"))
             decision.setdefault("commission", comm.as_dict())
             if comm.per_lot_roundtrip is None:
                 return
@@ -610,26 +723,40 @@ class Executor:
                 new_stop = D(raw_stop)
             except Exception:
                 raise Rejected("BAD_PRICE", "stop must be numeric")
+            # Symbol: explicit, else the default (BTCUSD) so BTC behaviour is unchanged.
+            # A position_id may address an auto position on any allowed symbol.
+            symbol = self.resolve_symbol(payload)
+            decision["symbol"] = symbol
             if self.cfg.kill_active:
                 raise Rejected("KILL_SWITCH", "kill switch is active; no mutations")
 
-            reads = self._read_all(need_spec=False, need_deals=False)
+            reads = self._read_all(symbol=symbol, need_spec=False, need_deals=False)
             decision["guards"] = self.guard_state(reads)
             self._check_login(reads["account"])
-            book = guards.classify_positions(reads["positions"], symbol=self.cfg.symbol, magic=self.cfg.magic, comment=self.cfg.comment)
-            if not book.auto:
-                raise Rejected("NO_AUTO_POSITION", "no open automated position to tighten")
-            target_pos = book.auto[0]
             wanted = payload.get("position_id", payload.get("positionId"))
             if wanted is not None:
-                matches = [p for p in book.auto if str(p.get("id")) == str(wanted)]
+                allowed_auto = guards.classify_positions(reads["positions"], symbols=self.cfg.symbols, magic=self.cfg.magic, comment=self.cfg.comment).auto
+                matches = [p for p in allowed_auto if str(p.get("id")) == str(wanted)]
                 if not matches:
-                    raise Rejected("POSITION_NOT_FOUND", f"position {wanted} is not an open automated position")
+                    raise Rejected("POSITION_NOT_FOUND", f"position {wanted} is not an open automated position on {list(self.cfg.symbols)}")
                 target_pos = matches[0]
-            elif len(book.auto) > 1:
-                raise Rejected("AMBIGUOUS_POSITION", "more than one automated position open; pass position_id", positions=[p.get("id") for p in book.auto])
+                symbol = str(target_pos.get("symbol") or symbol)
+                decision["symbol"] = symbol
+            else:
+                book = guards.classify_positions(reads["positions"], symbol=symbol, magic=self.cfg.magic, comment=self.cfg.comment)
+                if not book.auto:
+                    raise Rejected("NO_AUTO_POSITION", f"no open automated {symbol} position to tighten")
+                if len(book.auto) > 1:
+                    raise Rejected("AMBIGUOUS_POSITION", f"more than one automated {symbol} position open; pass position_id", positions=[p.get("id") for p in book.auto])
+                target_pos = book.auto[0]
 
-            quote = guards.parse_quote(reads["quote_raw"])
+            quote_raw = reads["quotes"].get(symbol)
+            if quote_raw is None:
+                try:
+                    quote_raw = self._quote_for(symbol)
+                except BrokerError as exc:
+                    raise Rejected("READ_FAILED", f"live read failed at current_price({symbol}): {exc}", step=f"current_price({symbol})")
+            quote = guards.parse_quote(quote_raw)
             levels = guards.check_tighten(target_pos, new_stop, quote)
             modify = {
                 "actionType": "POSITION_MODIFY",
@@ -639,6 +766,7 @@ class Executor:
             }
             decision["position"] = {
                 "id": target_pos.get("id"),
+                "symbol": target_pos.get("symbol"),
                 "type": target_pos.get("type"),
                 "openPrice": target_pos.get("openPrice"),
                 "volume": target_pos.get("volume"),
@@ -681,6 +809,7 @@ class Executor:
             decision["reason"] = exc.reason
             if exc.detail:
                 decision["detail"] = exc.detail
+            decision.setdefault("symbol", str(payload.get("symbol") or self.cfg.symbol) if isinstance(payload, dict) else self.cfg.symbol)
             self._tighten_failed(decision)
             return decision
 
@@ -700,6 +829,7 @@ class Executor:
             sent=decision.get("sent"),
             request=decision.get("request"),
             position=decision.get("position"),
+            symbol=decision.get("symbol"),
             broker_response=decision.get("broker_response"),
         )
 

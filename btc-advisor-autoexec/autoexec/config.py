@@ -12,13 +12,15 @@ import json
 import os
 from dataclasses import dataclass, field, fields
 from pathlib import Path
-from typing import Any, Dict, Mapping, Optional
+import re
+from typing import Any, Dict, List, Mapping, Optional, Tuple
 
 LONDON_CLIENT_HOST = "https://mt-client-api-v1.london.agiliumtrade.ai"
 
 DEFAULT_ACCOUNT_ID = "a60dfd98-8a34-4c1b-9f2c-b40cdcc2c3bf"
 DEFAULT_EXPECTED_LOGIN = "541458001"
 DEFAULT_SYMBOL = "BTCUSD"
+DEFAULT_SYMBOLS = ("BTCUSD", "ETHUSD", "SOLUSD")
 DEFAULT_COMMENT = "BTC_ADVISOR_AUTO"
 DEFAULT_MAGIC = 20261010
 
@@ -27,6 +29,21 @@ DEFAULT_STATE_DIR = "/home/solveetcoagula/btc-advisor-autoexec/state"
 
 
 Env = Mapping[str, str]
+
+
+def env_suffix(symbol: str) -> str:
+    """``US100.cash`` -> ``US100_CASH``: the suffix used by per-symbol env variables."""
+
+    return re.sub(r"[^A-Z0-9]", "_", symbol.upper())
+
+
+def _env_per_symbol(env: Env, prefix: str, symbols: Tuple[str, ...]) -> Dict[str, float]:
+    out: Dict[str, float] = {}
+    for sym in symbols:
+        raw = env.get(f"{prefix}_{env_suffix(sym)}")
+        if raw is not None and raw.strip() != "":
+            out[sym] = float(raw)
+    return out
 
 
 def _env_bool(env: Env, name: str, default: bool) -> bool:
@@ -69,7 +86,8 @@ class Config:
     # Target account
     account_id: str = DEFAULT_ACCOUNT_ID
     expected_login: str = DEFAULT_EXPECTED_LOGIN
-    symbol: str = DEFAULT_SYMBOL
+    symbol: str = DEFAULT_SYMBOL  # default symbol when a request carries none (Odin 2026-10-10 17:07 ET)
+    symbols: Tuple[str, ...] = DEFAULT_SYMBOLS  # allowed set, AUTOEXEC_SYMBOLS
     client_host: str = LONDON_CLIENT_HOST
 
     # Identity of the auto-trader's own trades
@@ -92,12 +110,18 @@ class Config:
     max_positions_total: int = 2
     second_position_min_rr: float = 2.0
     min_margin_level_pct: float = 200.0
-    margin_per_lot_usd: Optional[float] = None
-    symbol_leverage: Optional[float] = None
+    margin_per_lot_usd: Optional[float] = None  # BTCUSD (legacy un-suffixed name)
+    symbol_leverage: Optional[float] = None  # BTCUSD (legacy un-suffixed name)
+    margin_per_lot_usd_by_symbol: Dict[str, float] = field(default_factory=dict)
+    symbol_leverage_by_symbol: Dict[str, float] = field(default_factory=dict)
     margin_use_account_leverage: bool = False
+    second_position_scope: str = "allowed"  # allowed | all: which symbols' positions count for the second-position rule
 
-    # Commission
+    # Commission. The un-suffixed fallback is BTCUSD's figure (Odin 05:47 ET) and applies
+    # to BTCUSD only; other symbols need AUTOEXEC_COMMISSION_PER_LOT_ROUNDTRIP_<SYMBOL>
+    # or a broker/deals-derived value, otherwise the entry is skipped (no guessed values).
     commission_per_lot_roundtrip: float = 27.0
+    commission_per_lot_roundtrip_by_symbol: Dict[str, float] = field(default_factory=dict)
     commission_source: str = "auto"  # auto | env | spec | deals
     commission_lookback_days: int = 30
 
@@ -134,10 +158,15 @@ class Config:
     def from_env(cls, env: Optional[Env] = None) -> "Config":
         e: Env = os.environ if env is None else env
         state_dir = _env_str(e, "AUTOEXEC_STATE_DIR", DEFAULT_STATE_DIR)
+        # Broker symbol names are case-sensitive (e.g. US100.cash); keep them as written.
+        symbols = tuple(
+            dict.fromkeys(sym.strip() for sym in _env_str(e, "AUTOEXEC_SYMBOLS", ",".join(DEFAULT_SYMBOLS)).split(",") if sym.strip())
+        )
         cfg = cls(
             account_id=_env_str(e, "AUTOEXEC_ACCOUNT_ID", DEFAULT_ACCOUNT_ID),
             expected_login=_env_str(e, "AUTOEXEC_EXPECTED_LOGIN", DEFAULT_EXPECTED_LOGIN),
             symbol=_env_str(e, "AUTOEXEC_SYMBOL", DEFAULT_SYMBOL),
+            symbols=symbols,
             client_host=_env_str(e, "AUTOEXEC_CLIENT_HOST", LONDON_CLIENT_HOST).rstrip("/"),
             magic=_env_int(e, "AUTOEXEC_MAGIC", DEFAULT_MAGIC),
             comment=_env_str(e, "AUTOEXEC_COMMENT", DEFAULT_COMMENT),
@@ -154,8 +183,12 @@ class Config:
             min_margin_level_pct=_env_float(e, "AUTOEXEC_MIN_MARGIN_LEVEL_PCT", 200.0),
             margin_per_lot_usd=_env_opt_float(e, "AUTOEXEC_MARGIN_PER_LOT_USD"),
             symbol_leverage=_env_opt_float(e, "AUTOEXEC_SYMBOL_LEVERAGE"),
+            margin_per_lot_usd_by_symbol=_env_per_symbol(e, "AUTOEXEC_MARGIN_PER_LOT_USD", symbols),
+            symbol_leverage_by_symbol=_env_per_symbol(e, "AUTOEXEC_SYMBOL_LEVERAGE", symbols),
             margin_use_account_leverage=_env_bool(e, "AUTOEXEC_MARGIN_USE_ACCOUNT_LEVERAGE", False),
+            second_position_scope=_env_str(e, "AUTOEXEC_SECOND_POSITION_SCOPE", "allowed").lower(),
             commission_per_lot_roundtrip=_env_float(e, "AUTOEXEC_COMMISSION_PER_LOT_ROUNDTRIP", 27.0),
+            commission_per_lot_roundtrip_by_symbol=_env_per_symbol(e, "AUTOEXEC_COMMISSION_PER_LOT_ROUNDTRIP", symbols),
             commission_source=_env_str(e, "AUTOEXEC_COMMISSION_SOURCE", "auto").lower(),
             commission_lookback_days=_env_int(e, "AUTOEXEC_COMMISSION_LOOKBACK_DAYS", 30),
             day_tz=_env_str(e, "AUTOEXEC_DAY_TZ", "Europe/Prague"),
@@ -179,6 +212,12 @@ class Config:
         return cfg
 
     def validate(self) -> None:
+        if not self.symbols:
+            raise ValueError("AUTOEXEC_SYMBOLS must list at least one symbol")
+        if self.symbol not in self.symbols:
+            raise ValueError(f"AUTOEXEC_SYMBOL {self.symbol!r} must be in AUTOEXEC_SYMBOLS {list(self.symbols)}")
+        if self.second_position_scope not in {"allowed", "all"}:
+            raise ValueError("AUTOEXEC_SECOND_POSITION_SCOPE must be allowed|all")
         if self.commission_source not in {"auto", "env", "spec", "deals"}:
             raise ValueError(f"AUTOEXEC_COMMISSION_SOURCE must be auto|env|spec|deals, got {self.commission_source!r}")
         if self.max_risk_usd <= 0:
@@ -208,6 +247,43 @@ class Config:
         if not self.comment:
             raise ValueError("AUTOEXEC_COMMENT must be set")
 
+    # ---- per-symbol lookups --------------------------------------------------
+
+    def is_allowed_symbol(self, symbol: str) -> bool:
+        return symbol in self.symbols
+
+    def canonical_symbol(self, raw: str) -> Optional[str]:
+        """Case-insensitive match of a requested symbol against the allowed set; None if unknown."""
+
+        wanted = str(raw).strip().upper()
+        for sym in self.symbols:
+            if sym.upper() == wanted:
+                return sym
+        return None
+
+    def commission_env_for(self, symbol: str) -> Optional[float]:
+        """Env fallback commission for ``symbol``; None means no fallback (skip, never guess)."""
+
+        if symbol in self.commission_per_lot_roundtrip_by_symbol:
+            return self.commission_per_lot_roundtrip_by_symbol[symbol]
+        if symbol == DEFAULT_SYMBOL:
+            return self.commission_per_lot_roundtrip
+        return None
+
+    def margin_per_lot_for(self, symbol: str) -> Optional[float]:
+        if symbol in self.margin_per_lot_usd_by_symbol:
+            return self.margin_per_lot_usd_by_symbol[symbol]
+        if symbol == DEFAULT_SYMBOL:
+            return self.margin_per_lot_usd
+        return None
+
+    def symbol_leverage_for(self, symbol: str) -> Optional[float]:
+        if symbol in self.symbol_leverage_by_symbol:
+            return self.symbol_leverage_by_symbol[symbol]
+        if symbol == DEFAULT_SYMBOL:
+            return self.symbol_leverage
+        return None
+
     @property
     def kill_active(self) -> bool:
         """Kill switch: env flag or presence of the kill file. Blocks every mutation."""
@@ -224,8 +300,17 @@ class Config:
             if f.name in {"extra", "api_key"}:
                 continue
             out[f.name] = getattr(self, f.name)
+        out["symbols"] = list(self.symbols)
         out["api_key_set"] = bool(self.api_key)
         out["kill_active"] = self.kill_active
+        out["per_symbol"] = {
+            sym: {
+                "commission_env_fallback": self.commission_env_for(sym),
+                "margin_per_lot_usd": self.margin_per_lot_for(sym),
+                "symbol_leverage": self.symbol_leverage_for(sym),
+            }
+            for sym in self.symbols
+        }
         return out
 
 

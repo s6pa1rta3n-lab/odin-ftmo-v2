@@ -313,7 +313,8 @@ def test_status_cache_hit_within_ttl_and_refresh_after(tmp_path):
     s1 = ex.status()
     assert s1["ok"] and s1["snapshot"]["cached"] is False
     n = _status_calls(broker)
-    assert n == 6  # first status: account, positions, price, spec, deals today, deals lookback
+    # first status: account, positions, (price + spec) x 3 allowed symbols, deals today, deals lookback
+    assert n == 10
     ex.clock["mono"] += 10
     s2 = ex.status()
     assert s2["ok"] and s2["snapshot"]["cached"] is True and s2["snapshot"]["age_sec"] == 10.0
@@ -321,9 +322,14 @@ def test_status_cache_hit_within_ttl_and_refresh_after(tmp_path):
     ex.clock["mono"] += 6  # 16s since the snapshot
     s3 = ex.status()
     assert s3["snapshot"]["cached"] is False
-    # refresh: 4 fresh reads; spec and lookback still cached (30 min)
-    assert _status_calls(broker) == n + 4
-    assert s3["reads"]["cache_hits"] == ["symbol_specification", "history_deals(lookback)"]
+    # refresh: account, positions, 3 quotes, deals today = 6 fresh reads; specs and lookback still cached (30 min)
+    assert _status_calls(broker) == n + 6
+    assert s3["reads"]["cache_hits"] == [
+        "symbol_specification(BTCUSD)",
+        "symbol_specification(ETHUSD)",
+        "symbol_specification(SOLUSD)",
+        "history_deals(lookback)",
+    ]
 
 
 def test_status_cache_keeps_local_guard_inputs_live(tmp_path):
@@ -344,7 +350,7 @@ def test_status_failure_is_logged_and_negative_cached(tmp_path):
     s1 = ex.status()
     assert s1["ok"] is False and s1["code"] == "READ_FAILED" and s1["snapshot"]["cached"] is False
     failed = _events(ex, "status_read_failed")
-    assert failed and failed[-1]["alert"] is True and failed[-1]["step"] == "current_price"
+    assert failed and failed[-1]["alert"] is True and failed[-1]["step"] == "current_price(BTCUSD)"
     n = len(broker.read_calls)
     s2 = ex.status()
     assert s2["ok"] is False and s2["snapshot"]["cached"] is True
@@ -360,7 +366,7 @@ def test_status_cache_disabled_with_zero_ttl(tmp_path):
     ex.status()
     n = len(broker.read_calls)
     ex.status()
-    assert len(broker.read_calls) == n + 4  # fresh reads except the 30-min spec/lookback caches
+    assert len(broker.read_calls) == n + 6  # fresh reads (account, positions, 3 quotes, deals today) except the 30-min spec/lookback caches
 
 
 def test_setup_and_tighten_bypass_status_cache(tmp_path):

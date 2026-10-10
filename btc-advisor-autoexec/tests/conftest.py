@@ -63,6 +63,10 @@ class FakeBroker:
         self.positions_list = list(positions or [])
         self.spec = dict(spec or SPEC)
         self.quote = dict(quote or QUOTE)
+        # Per-symbol overrides; anything not listed falls back to self.spec / self.quote.
+        self.specs: Dict[str, Dict[str, Any]] = {}
+        self.quotes: Dict[str, Dict[str, Any]] = {}
+        self.unknown_symbols: set = set()  # symbols the "broker" does not know (404)
         self.deals = list(deals or [])
         self.trade_calls: List[Dict[str, Any]] = []
         self.trade_response: Dict[str, Any] = {"numericCode": 10009, "stringCode": "TRADE_RETCODE_DONE", "orderId": "9001", "positionId": "9001"}
@@ -93,13 +97,23 @@ class FakeBroker:
         self._maybe_fail("positions")
         return [dict(p) for p in self.positions_list]
 
+    def set_symbol(self, symbol: str, *, spec: Optional[Dict[str, Any]] = None, quote: Optional[Dict[str, Any]] = None) -> None:
+        if spec is not None:
+            self.specs[symbol] = dict(spec, symbol=symbol)
+        if quote is not None:
+            self.quotes[symbol] = dict(quote, symbol=symbol)
+
     def symbol_specification(self, symbol: str) -> Dict[str, Any]:
         self._maybe_fail("symbol_specification")
-        return dict(self.spec)
+        if symbol in self.unknown_symbols:
+            raise BrokerError(f"HTTP 404 GET /symbols/{symbol}/specification: not found", status=404)
+        return dict(self.specs.get(symbol, self.spec), symbol=symbol)
 
     def current_price(self, symbol: str) -> Dict[str, Any]:
         self._maybe_fail("current_price")
-        return dict(self.quote)
+        if symbol in self.unknown_symbols:
+            raise BrokerError(f"HTTP 404 GET /symbols/{symbol}/current-price: not found", status=404)
+        return dict(self.quotes.get(symbol, self.quote), symbol=symbol)
 
     def history_deals(self, start: datetime, end: datetime) -> List[Dict[str, Any]]:
         self._maybe_fail("history_deals")
