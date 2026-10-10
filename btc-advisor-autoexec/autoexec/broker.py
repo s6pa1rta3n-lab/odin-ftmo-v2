@@ -15,16 +15,49 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 from typing import Any, Dict, List, Optional
 
 
 class BrokerError(RuntimeError):
     """HTTP or transport failure talking to MetaAPI. Never carries the token."""
 
-    def __init__(self, message: str, *, status: Optional[int] = None, body: Optional[str] = None) -> None:
+    def __init__(
+        self,
+        message: str,
+        *,
+        status: Optional[int] = None,
+        body: Optional[str] = None,
+        retry_after: Optional[float] = None,
+    ) -> None:
         super().__init__(message)
         self.status = status
         self.body = body
+        self.retry_after = retry_after  # seconds, parsed from the Retry-After header when present
+
+
+def parse_retry_after(value: Optional[str], *, now: Optional[datetime] = None) -> Optional[float]:
+    """Seconds to wait from a ``Retry-After`` header value (delta-seconds or HTTP-date); None if absent/unparseable."""
+
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    try:
+        return max(0.0, float(text))
+    except ValueError:
+        pass
+    try:
+        when = parsedate_to_datetime(text)
+    except (TypeError, ValueError, IndexError):
+        return None
+    if when is None:
+        return None
+    if when.tzinfo is None:
+        when = when.replace(tzinfo=timezone.utc)
+    ref = now or datetime.now(timezone.utc)
+    return max(0.0, (when - ref).total_seconds())
 
 
 def _iso_z(dt: datetime) -> str:
@@ -62,7 +95,10 @@ class MetaApiRest:
                 return json.loads(raw) if raw else {}
         except urllib.error.HTTPError as exc:
             err_body = exc.read().decode("utf-8", errors="replace")[:800]
-            raise BrokerError(f"HTTP {exc.code} {method} {path}: {err_body}", status=exc.code, body=err_body) from None
+            retry_after = parse_retry_after(exc.headers.get("Retry-After") if exc.headers else None)
+            raise BrokerError(
+                f"HTTP {exc.code} {method} {path}: {err_body}", status=exc.code, body=err_body, retry_after=retry_after
+            ) from None
         except urllib.error.URLError as exc:
             raise BrokerError(f"transport error {method} {path}: {exc.reason}") from None
         except (TimeoutError, OSError) as exc:

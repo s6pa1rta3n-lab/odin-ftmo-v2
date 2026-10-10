@@ -234,6 +234,47 @@ the order payload), `order_send`, `post_place_sync`, `equity_halt_latched`,
 `token`, `auth`, `secret`, `password`, `api_key` are redacted recursively, and the loaded
 token value itself is scrubbed from every line as a second layer.
 
+## Reliability: caches and 429/5xx retry
+
+Assigned by Trading Ops on 2026-10-10 09:57 ET after a MetaAPI 429 at 09:51 ET. This
+layer sits under the guards; guards, sizing, decisions and the `state.json` format are
+unchanged, and the deploy is a restart only.
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `AUTOEXEC_SPEC_CACHE_SEC` | `1800` | Symbol specification cache (in memory). `0` disables. |
+| `AUTOEXEC_COMMISSION_CACHE_SEC` | `1800` | Deals-derived commission lookback (30-day `history-deals`) cache. `0` disables. |
+| `AUTOEXEC_STATUS_CACHE_SEC` | `15` | Snapshot cache used **only** by `GET /status` / `status`. `/setup` and `/tighten` always read fresh. Failures are cached for the same TTL so a poller cannot amplify rate limiting. `0` disables. |
+| `AUTOEXEC_RETRY_ATTEMPTS` | `3` | Tries for reads and for `POSITION_MODIFY`. `1` = no retry. |
+| `AUTOEXEC_RETRY_BUDGET_SEC` | `10` | Wall-clock budget for all tries of one call. |
+| `AUTOEXEC_RETRY_BASE_SEC` / `AUTOEXEC_RETRY_MAX_SEC` | `1` / `4` | Exponential backoff when no `Retry-After` is present. |
+
+Retry rules (`autoexec/retry.py`):
+- Retried: HTTP 429 and 5xx on every read (`account-information`, `positions`,
+  `current-price`, `specification`, `history-deals`) and on the `POSITION_MODIFY`
+  behind `/tighten` (idempotent: the same SL/TP is re-sent).
+- `Retry-After` (seconds or HTTP-date) is honoured when present; otherwise backoff
+  `1s, 2s, 4s…`. A delay that would overrun the budget ends the loop and the call fails.
+- **Never retried: new-order placement** (`ORDER_TYPE_BUY/SELL`). A 429/5xx on `/trade`
+  does not prove the order was never accepted, so a retry could double-fill. Entry
+  placement keeps exactly one attempt plus the existing ambiguous-place handling and
+  `POST_PLACE_COOLDOWN`.
+- Other errors (4xx, transport) are not retried.
+
+Log events: `broker_rate_limited` (every 429, with `retry_after_sec`), `broker_retry`
+(attempt, delay, source), `broker_retry_succeeded`, `broker_retry_exhausted`
+(`outcome: failed`), `status_read_failed` (`alert: true`), and `tighten_failed`
+(`alert: true, level: ALERT`) for **every** `/tighten` that does not go through —
+read failure after retries, modify error after retries, broker rejection, or a guard
+rejection. The decision JSON of a failed tighten also carries `alert: true` and a clear
+`code` (`READ_FAILED`, `MODIFY_ERROR`, `MODIFY_REJECTED`, `SL_NOT_TIGHTER`, …).
+
+`/status` responses include `snapshot: {cached, age_sec, ttl_sec, cache_hits}`. Local
+inputs (HALT file, KILL file, cooldown, daily-cap latch) are recomputed on every call
+even when the broker snapshot is cached. Live calls per `/status`: 6 on the first call,
+then at most 4 per `AUTOEXEC_STATUS_CACHE_SEC` window while the spec/lookback caches
+are warm.
+
 ## Dry-run
 
 With `AUTOEXEC_ORDERS_ENABLED=0` (default) or the kill switch on, `/setup` and
@@ -261,7 +302,7 @@ kill, orders flag). The broker object is wrapped so `trade()` cannot be reached.
 cd btc-advisor-autoexec
 python3 -m pytest tests -q
 ```
-138 tests with a fake MetaAPI broker; no network, no token file. Coverage per mechanic:
+168 tests with a fake MetaAPI broker; no network, no token file. Coverage per mechanic:
 sizing incl. spread + commission and floor to step, skip when min lot > $250, non-market
 rejected, missing SL/TP rejected, max-2 total, every second-position condition (accept
 and reject paths, incl. margin unknown/level/override/spec), tighten-only accept and

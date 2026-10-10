@@ -70,9 +70,18 @@ class FakeBroker:
         self.fail_reads: set = set()
         self.read_calls: List[str] = []
         self.history_windows: List[tuple] = []
+        # Transient failures: one exception popped per call for that operation name
+        # ("account_information", "positions", ..., "trade").
+        self.fail_queue: Dict[str, List[Exception]] = {}
+
+    def fail_next(self, name: str, *errors: Exception) -> None:
+        self.fail_queue.setdefault(name, []).extend(errors)
 
     def _maybe_fail(self, name: str) -> None:
         self.read_calls.append(name)
+        queued = self.fail_queue.get(name)
+        if queued:
+            raise queued.pop(0)
         if name in self.fail_reads:
             raise BrokerError(f"simulated failure in {name}", status=503)
 
@@ -99,6 +108,9 @@ class FakeBroker:
 
     def trade(self, payload: Dict[str, Any]) -> Dict[str, Any]:
         self.trade_calls.append(dict(payload))
+        queued = self.fail_queue.get("trade")
+        if queued:
+            raise queued.pop(0)
         if self.trade_error is not None:
             raise self.trade_error
         return dict(self.trade_response)
@@ -178,7 +190,13 @@ def make_config(tmp_path, **env: str) -> Config:
 
 def make_executor(tmp_path, broker: FakeBroker, *, now: datetime = NOW, env: Optional[Dict[str, str]] = None, token: str = "SECRET-TOKEN-123") -> Executor:
     cfg = make_config(tmp_path, **(env or {}))
-    clock = {"now": now}
+    clock = {"now": now, "mono": 1000.0}
+    sleeps: List[float] = []
+
+    def fake_sleep(seconds: float) -> None:
+        sleeps.append(seconds)
+        clock["mono"] += seconds
+
     logger = JsonLogger(cfg.log_path, stdout=False, token=token)
     ex = Executor(
         cfg,
@@ -187,8 +205,11 @@ def make_executor(tmp_path, broker: FakeBroker, *, now: datetime = NOW, env: Opt
         state=StateStore(os.path.join(cfg.state_dir, "state.json")),
         halt=HaltLatch(cfg.halt_file),
         now_fn=lambda: clock["now"],
+        sleep_fn=fake_sleep,
+        monotonic_fn=lambda: clock["mono"],
     )
-    ex.clock = clock  # type: ignore[attr-defined]  # tests advance time via ex.clock["now"] = ...
+    ex.clock = clock  # type: ignore[attr-defined]  # tests advance time via ex.clock["now"] / ex.clock["mono"]
+    ex.sleeps = sleeps  # type: ignore[attr-defined]  # recorded retry delays; no real sleeping in tests
     return ex
 
 

@@ -46,6 +46,13 @@ Environment=AUTOEXEC_MIN_MARGIN_LEVEL_PCT=200
 # Environment=AUTOEXEC_SYMBOL_LEVERAGE=2
 # Environment=AUTOEXEC_MARGIN_PER_LOT_USD=
 
+# --- reliability (Trading Ops 2026-10-10): caches + 429/5xx retry; defaults shown ---
+Environment=AUTOEXEC_SPEC_CACHE_SEC=1800
+Environment=AUTOEXEC_COMMISSION_CACHE_SEC=1800
+Environment=AUTOEXEC_STATUS_CACHE_SEC=15
+Environment=AUTOEXEC_RETRY_ATTEMPTS=3
+Environment=AUTOEXEC_RETRY_BUDGET_SEC=10
+
 # --- identity, files, interface ---
 Environment=AUTOEXEC_MAGIC=20261010
 Environment=AUTOEXEC_COMMENT=BTC_ADVISOR_AUTO
