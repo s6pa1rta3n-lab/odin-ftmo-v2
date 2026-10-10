@@ -3,7 +3,10 @@
 Routes (JSON in, JSON out):
 
 * ``GET  /health``            — liveness; never touches the broker.
-* ``GET  /status``            — read-only guard states from live data.
+* ``GET  /status``            — read-only guard states from live data (incl. per-symbol views).
+* ``GET  /symbol?symbol=XAUUSD[&stop_distance=25][&side=BUY]`` — read-only per-symbol report
+                                (spec, spread, commission, sample lot math, margin per lot, pass/fail).
+                                ``symbol`` may be a comma-separated list.
 * ``POST /setup``             — entry decision. Body: ``{"side","entry_type","stop","target"}``
                                 plus optional ``request_id``, ``dry_run``.
 * ``POST /tighten``           — tighten the auto position's stop. Body: ``{"stop"}``
@@ -15,8 +18,10 @@ If ``AUTOEXEC_API_KEY`` is set every request must carry ``X-Autoexec-Key``.
 from __future__ import annotations
 
 import json
+from decimal import Decimal, InvalidOperation
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any, Dict, Optional, Tuple
+from urllib.parse import parse_qs, urlsplit
 
 from .engine import Executor
 from .jsonlog import redact
@@ -70,10 +75,31 @@ class _Handler(BaseHTTPRequestHandler):
         if self.path == "/health":
             self._send(200, {"ok": True, "armed": self.executor.armed, "orders_enabled": self.executor.cfg.orders_enabled, "kill_active": self.executor.cfg.kill_active})
             return
-        if self.path == "/status":
+        parts = urlsplit(self.path)
+        if parts.path == "/status":
             st = self.executor.status()
             st.pop("reads", None)
             self._send(200 if st.get("ok") else 503, redact(st))
+            return
+        if parts.path == "/symbol":
+            qs = parse_qs(parts.query)
+            symbols = [x.strip() for x in ",".join(qs.get("symbol", [])).split(",") if x.strip()] or [None]
+            side = (qs.get("side", ["BUY"])[0] or "BUY").upper()
+            stop_distance: Optional[Decimal] = None
+            raw_stop = qs.get("stop_distance", [None])[0]
+            if raw_stop not in (None, ""):
+                try:
+                    stop_distance = Decimal(str(raw_stop))
+                    if stop_distance <= 0:
+                        raise InvalidOperation
+                except (InvalidOperation, ValueError):
+                    self._send(400, {"ok": False, "code": "BAD_REQUEST", "reason": "stop_distance must be a positive number"})
+                    return
+            results = [self.executor.symbol_info(sym, stop_distance=stop_distance, side=side) for sym in symbols]
+            if len(results) == 1:
+                self._send(200, redact(results[0]))
+            else:
+                self._send(200, redact({"ok": all(r.get("ok") for r in results), "symbols": results}))
             return
         self._send(404, {"ok": False, "code": "NOT_FOUND"})
 

@@ -20,7 +20,8 @@ LONDON_CLIENT_HOST = "https://mt-client-api-v1.london.agiliumtrade.ai"
 DEFAULT_ACCOUNT_ID = "a60dfd98-8a34-4c1b-9f2c-b40cdcc2c3bf"
 DEFAULT_EXPECTED_LOGIN = "541458001"
 DEFAULT_SYMBOL = "BTCUSD"
-DEFAULT_SYMBOLS = ("BTCUSD", "ETHUSD", "SOLUSD")
+DEFAULT_SYMBOLS: Tuple[str, ...] = ()  # empty allowlist = every symbol the broker lists (Odin 2026-10-10 19:07 ET)
+ASSET_CLASSES = ("crypto", "forex", "index", "metals")
 DEFAULT_COMMENT = "BTC_ADVISOR_AUTO"
 DEFAULT_MAGIC = 20261010
 
@@ -37,13 +38,27 @@ def env_suffix(symbol: str) -> str:
     return re.sub(r"[^A-Z0-9]", "_", symbol.upper())
 
 
-def _env_per_symbol(env: Env, prefix: str, symbols: Tuple[str, ...]) -> Dict[str, float]:
-    out: Dict[str, float] = {}
-    for sym in symbols:
-        raw = env.get(f"{prefix}_{env_suffix(sym)}")
-        if raw is not None and raw.strip() != "":
-            out[sym] = float(raw)
+def _env_by_suffix(env: Env, prefix: str, *, exclude: Tuple[str, ...] = ()) -> Dict[str, str]:
+    """``{SUFFIX: value}`` for every ``<prefix>_<SUFFIX>`` env var (symbols are open-ended)."""
+
+    out: Dict[str, str] = {}
+    head = prefix + "_"
+    for key, raw in env.items():
+        if not key.startswith(head) or raw is None or str(raw).strip() == "":
+            continue
+        suffix = key[len(head):]
+        if not suffix or key in exclude:
+            continue
+        out[suffix] = str(raw).strip()
     return out
+
+
+def _env_by_suffix_float(env: Env, prefix: str, *, exclude: Tuple[str, ...] = ()) -> Dict[str, float]:
+    return {k: float(v) for k, v in _env_by_suffix(env, prefix, exclude=exclude).items()}
+
+
+def _csv(value: str) -> Tuple[str, ...]:
+    return tuple(dict.fromkeys(x.strip() for x in value.split(",") if x.strip()))
 
 
 def _env_bool(env: Env, name: str, default: bool) -> bool:
@@ -87,7 +102,9 @@ class Config:
     account_id: str = DEFAULT_ACCOUNT_ID
     expected_login: str = DEFAULT_EXPECTED_LOGIN
     symbol: str = DEFAULT_SYMBOL  # default symbol when a request carries none (Odin 2026-10-10 17:07 ET)
-    symbols: Tuple[str, ...] = DEFAULT_SYMBOLS  # allowed set, AUTOEXEC_SYMBOLS
+    symbols: Tuple[str, ...] = DEFAULT_SYMBOLS  # optional allowlist, AUTOEXEC_SYMBOLS; empty = everything the broker lists
+    symbols_deny: Tuple[str, ...] = ()  # optional denylist, AUTOEXEC_SYMBOLS_DENY
+    status_symbols: Tuple[str, ...] = ()  # extra symbols to report in /status, AUTOEXEC_STATUS_SYMBOLS
     client_host: str = LONDON_CLIENT_HOST
 
     # Identity of the auto-trader's own trades
@@ -112,16 +129,26 @@ class Config:
     min_margin_level_pct: float = 200.0
     margin_per_lot_usd: Optional[float] = None  # BTCUSD (legacy un-suffixed name)
     symbol_leverage: Optional[float] = None  # BTCUSD (legacy un-suffixed name)
-    margin_per_lot_usd_by_symbol: Dict[str, float] = field(default_factory=dict)
-    symbol_leverage_by_symbol: Dict[str, float] = field(default_factory=dict)
+    margin_per_lot_usd_by_symbol: Dict[str, float] = field(default_factory=dict)  # keyed by env suffix
+    symbol_leverage_by_symbol: Dict[str, float] = field(default_factory=dict)  # keyed by env suffix
     margin_use_account_leverage: bool = False
-    second_position_scope: str = "allowed"  # allowed | all: which symbols' positions count for the second-position rule
+    margin_calc_broker: bool = True  # prefer MetaAPI calculate-margin (broker-reported) for the margin estimate
+    second_position_scope: str = "all"  # all (account-wide, Odin 19:07 ET) | allowed (allowlist symbols only)
+    sample_stop_pct: float = 1.0  # default sample stop distance for /symbol as % of price
 
-    # Commission. The un-suffixed fallback is BTCUSD's figure (Odin 05:47 ET) and applies
-    # to BTCUSD only; other symbols need AUTOEXEC_COMMISSION_PER_LOT_ROUNDTRIP_<SYMBOL>
-    # or a broker/deals-derived value, otherwise the entry is skipped (no guessed values).
+    # Commission (Odin 19:07 ET): broker/deals-derived when available, else a model per
+    # symbol or asset class. ``pct`` = percentage of notional per side (default 0.065 %,
+    # Trading Ops' measured FTMO crypto rate); ``flat`` = per-lot round trip. The pct model
+    # is the default for crypto only; forex/index/metals need broker/deals data or an
+    # explicit per-symbol value, otherwise the entry skips (COMMISSION_UNAVAILABLE).
+    # The un-suffixed flat fallback (27) is BTCUSD's legacy figure (Odin 05:47 ET) and is
+    # used only when BTCUSD resolves to the flat model.
     commission_per_lot_roundtrip: float = 27.0
-    commission_per_lot_roundtrip_by_symbol: Dict[str, float] = field(default_factory=dict)
+    commission_per_lot_roundtrip_by_symbol: Dict[str, float] = field(default_factory=dict)  # keyed by env suffix
+    commission_pct_per_side: float = 0.065
+    commission_pct_per_side_by_symbol: Dict[str, float] = field(default_factory=dict)  # keyed by env suffix (symbol or class)
+    commission_model_by_symbol: Dict[str, str] = field(default_factory=dict)  # keyed by env suffix (symbol or class): pct | flat
+    asset_class_by_symbol: Dict[str, str] = field(default_factory=dict)  # keyed by env suffix
     commission_source: str = "auto"  # auto | env | spec | deals
     commission_lookback_days: int = 30
 
@@ -159,14 +186,14 @@ class Config:
         e: Env = os.environ if env is None else env
         state_dir = _env_str(e, "AUTOEXEC_STATE_DIR", DEFAULT_STATE_DIR)
         # Broker symbol names are case-sensitive (e.g. US100.cash); keep them as written.
-        symbols = tuple(
-            dict.fromkeys(sym.strip() for sym in _env_str(e, "AUTOEXEC_SYMBOLS", ",".join(DEFAULT_SYMBOLS)).split(",") if sym.strip())
-        )
+        symbols = _csv(_env_str(e, "AUTOEXEC_SYMBOLS", ""))
         cfg = cls(
             account_id=_env_str(e, "AUTOEXEC_ACCOUNT_ID", DEFAULT_ACCOUNT_ID),
             expected_login=_env_str(e, "AUTOEXEC_EXPECTED_LOGIN", DEFAULT_EXPECTED_LOGIN),
             symbol=_env_str(e, "AUTOEXEC_SYMBOL", DEFAULT_SYMBOL),
             symbols=symbols,
+            symbols_deny=_csv(_env_str(e, "AUTOEXEC_SYMBOLS_DENY", "")),
+            status_symbols=_csv(_env_str(e, "AUTOEXEC_STATUS_SYMBOLS", "")),
             client_host=_env_str(e, "AUTOEXEC_CLIENT_HOST", LONDON_CLIENT_HOST).rstrip("/"),
             magic=_env_int(e, "AUTOEXEC_MAGIC", DEFAULT_MAGIC),
             comment=_env_str(e, "AUTOEXEC_COMMENT", DEFAULT_COMMENT),
@@ -183,12 +210,18 @@ class Config:
             min_margin_level_pct=_env_float(e, "AUTOEXEC_MIN_MARGIN_LEVEL_PCT", 200.0),
             margin_per_lot_usd=_env_opt_float(e, "AUTOEXEC_MARGIN_PER_LOT_USD"),
             symbol_leverage=_env_opt_float(e, "AUTOEXEC_SYMBOL_LEVERAGE"),
-            margin_per_lot_usd_by_symbol=_env_per_symbol(e, "AUTOEXEC_MARGIN_PER_LOT_USD", symbols),
-            symbol_leverage_by_symbol=_env_per_symbol(e, "AUTOEXEC_SYMBOL_LEVERAGE", symbols),
+            margin_per_lot_usd_by_symbol=_env_by_suffix_float(e, "AUTOEXEC_MARGIN_PER_LOT_USD"),
+            symbol_leverage_by_symbol=_env_by_suffix_float(e, "AUTOEXEC_SYMBOL_LEVERAGE"),
             margin_use_account_leverage=_env_bool(e, "AUTOEXEC_MARGIN_USE_ACCOUNT_LEVERAGE", False),
-            second_position_scope=_env_str(e, "AUTOEXEC_SECOND_POSITION_SCOPE", "allowed").lower(),
+            margin_calc_broker=_env_bool(e, "AUTOEXEC_MARGIN_CALC_BROKER", True),
+            second_position_scope=_env_str(e, "AUTOEXEC_SECOND_POSITION_SCOPE", "all").lower(),
+            sample_stop_pct=_env_float(e, "AUTOEXEC_SAMPLE_STOP_PCT", 1.0),
             commission_per_lot_roundtrip=_env_float(e, "AUTOEXEC_COMMISSION_PER_LOT_ROUNDTRIP", 27.0),
-            commission_per_lot_roundtrip_by_symbol=_env_per_symbol(e, "AUTOEXEC_COMMISSION_PER_LOT_ROUNDTRIP", symbols),
+            commission_per_lot_roundtrip_by_symbol=_env_by_suffix_float(e, "AUTOEXEC_COMMISSION_PER_LOT_ROUNDTRIP"),
+            commission_pct_per_side=_env_float(e, "AUTOEXEC_COMMISSION_PCT_PER_SIDE", 0.065),
+            commission_pct_per_side_by_symbol=_env_by_suffix_float(e, "AUTOEXEC_COMMISSION_PCT_PER_SIDE"),
+            commission_model_by_symbol={k: v.lower() for k, v in _env_by_suffix(e, "AUTOEXEC_COMMISSION_MODEL").items()},
+            asset_class_by_symbol={k: v.lower() for k, v in _env_by_suffix(e, "AUTOEXEC_ASSET_CLASS").items()},
             commission_source=_env_str(e, "AUTOEXEC_COMMISSION_SOURCE", "auto").lower(),
             commission_lookback_days=_env_int(e, "AUTOEXEC_COMMISSION_LOOKBACK_DAYS", 30),
             day_tz=_env_str(e, "AUTOEXEC_DAY_TZ", "Europe/Prague"),
@@ -212,12 +245,24 @@ class Config:
         return cfg
 
     def validate(self) -> None:
-        if not self.symbols:
-            raise ValueError("AUTOEXEC_SYMBOLS must list at least one symbol")
-        if self.symbol not in self.symbols:
-            raise ValueError(f"AUTOEXEC_SYMBOL {self.symbol!r} must be in AUTOEXEC_SYMBOLS {list(self.symbols)}")
+        if not self.symbol:
+            raise ValueError("AUTOEXEC_SYMBOL must be set")
+        if self.symbols and self.symbol not in self.symbols:
+            raise ValueError(f"AUTOEXEC_SYMBOL {self.symbol!r} must be in the AUTOEXEC_SYMBOLS allowlist {list(self.symbols)}")
+        if self.symbol in self.symbols_deny:
+            raise ValueError(f"AUTOEXEC_SYMBOL {self.symbol!r} is in AUTOEXEC_SYMBOLS_DENY")
         if self.second_position_scope not in {"allowed", "all"}:
-            raise ValueError("AUTOEXEC_SECOND_POSITION_SCOPE must be allowed|all")
+            raise ValueError("AUTOEXEC_SECOND_POSITION_SCOPE must be all|allowed")
+        for suffix, model in self.commission_model_by_symbol.items():
+            if model not in {"pct", "flat"}:
+                raise ValueError(f"AUTOEXEC_COMMISSION_MODEL_{suffix} must be pct|flat, got {model!r}")
+        for suffix, cls_name in self.asset_class_by_symbol.items():
+            if cls_name not in ASSET_CLASSES:
+                raise ValueError(f"AUTOEXEC_ASSET_CLASS_{suffix} must be one of {list(ASSET_CLASSES)}")
+        if self.commission_pct_per_side < 0:
+            raise ValueError("AUTOEXEC_COMMISSION_PCT_PER_SIDE must be >= 0")
+        if self.sample_stop_pct <= 0:
+            raise ValueError("AUTOEXEC_SAMPLE_STOP_PCT must be > 0")
         if self.commission_source not in {"auto", "env", "spec", "deals"}:
             raise ValueError(f"AUTOEXEC_COMMISSION_SOURCE must be auto|env|spec|deals, got {self.commission_source!r}")
         if self.max_risk_usd <= 0:
@@ -250,36 +295,90 @@ class Config:
     # ---- per-symbol lookups --------------------------------------------------
 
     def is_allowed_symbol(self, symbol: str) -> bool:
-        return symbol in self.symbols
+        """Env allow/deny lists only; broker validation happens in the executor."""
+
+        if any(symbol.upper() == d.upper() for d in self.symbols_deny):
+            return False
+        if self.symbols:
+            return any(symbol.upper() == a.upper() for a in self.symbols)
+        return True
 
     def canonical_symbol(self, raw: str) -> Optional[str]:
-        """Case-insensitive match of a requested symbol against the allowed set; None if unknown."""
+        """Case-insensitive match against the env allowlist (if any); None if denied/not allowed.
 
-        wanted = str(raw).strip().upper()
+        With an empty allowlist the raw name is returned as written and the broker list
+        decides (see ``Executor.resolve_symbol``).
+        """
+
+        wanted = str(raw).strip()
+        if not wanted or not self.is_allowed_symbol(wanted):
+            return None
         for sym in self.symbols:
-            if sym.upper() == wanted:
+            if sym.upper() == wanted.upper():
                 return sym
+        return wanted
+
+    def _by_symbol(self, table: Dict[str, Any], symbol: str) -> Any:
+        return table.get(env_suffix(symbol))
+
+    def asset_class_override(self, symbol: str) -> Optional[str]:
+        return self._by_symbol(self.asset_class_by_symbol, symbol)
+
+    def commission_model_for(self, symbol: str, asset_class: Optional[str]) -> Optional[str]:
+        """Explicit per-symbol model, else the asset-class model (crypto defaults to pct)."""
+
+        explicit = self._by_symbol(self.commission_model_by_symbol, symbol)
+        if explicit:
+            return explicit
+        if self._by_symbol(self.commission_per_lot_roundtrip_by_symbol, symbol) is not None:
+            return "flat"
+        if self._by_symbol(self.commission_pct_per_side_by_symbol, symbol) is not None:
+            return "pct"
+        if asset_class:
+            by_class = self.commission_model_by_symbol.get(env_suffix(asset_class))
+            if by_class:
+                return by_class
+            if asset_class == "crypto":
+                return "pct"
+        if symbol == DEFAULT_SYMBOL and asset_class is None:
+            return "flat"  # legacy BTCUSD fallback (Odin 05:47 ET) when the broker gives no asset class
         return None
 
-    def commission_env_for(self, symbol: str) -> Optional[float]:
-        """Env fallback commission for ``symbol``; None means no fallback (skip, never guess)."""
-
-        if symbol in self.commission_per_lot_roundtrip_by_symbol:
-            return self.commission_per_lot_roundtrip_by_symbol[symbol]
+    def commission_flat_for(self, symbol: str) -> Optional[float]:
+        v = self._by_symbol(self.commission_per_lot_roundtrip_by_symbol, symbol)
+        if v is not None:
+            return v
         if symbol == DEFAULT_SYMBOL:
             return self.commission_per_lot_roundtrip
         return None
 
+    def commission_pct_for(self, symbol: str, asset_class: Optional[str]) -> float:
+        v = self._by_symbol(self.commission_pct_per_side_by_symbol, symbol)
+        if v is not None:
+            return v
+        if asset_class:
+            v = self.commission_pct_per_side_by_symbol.get(env_suffix(asset_class))
+            if v is not None:
+                return v
+        return self.commission_pct_per_side
+
+    def commission_env_for(self, symbol: str) -> Optional[float]:
+        """Flat env fallback for ``symbol`` (kept for callers of the #86 API)."""
+
+        return self.commission_flat_for(symbol)
+
     def margin_per_lot_for(self, symbol: str) -> Optional[float]:
-        if symbol in self.margin_per_lot_usd_by_symbol:
-            return self.margin_per_lot_usd_by_symbol[symbol]
+        v = self._by_symbol(self.margin_per_lot_usd_by_symbol, symbol)
+        if v is not None:
+            return v
         if symbol == DEFAULT_SYMBOL:
             return self.margin_per_lot_usd
         return None
 
     def symbol_leverage_for(self, symbol: str) -> Optional[float]:
-        if symbol in self.symbol_leverage_by_symbol:
-            return self.symbol_leverage_by_symbol[symbol]
+        v = self._by_symbol(self.symbol_leverage_by_symbol, symbol)
+        if v is not None:
+            return v
         if symbol == DEFAULT_SYMBOL:
             return self.symbol_leverage
         return None
@@ -301,16 +400,9 @@ class Config:
                 continue
             out[f.name] = getattr(self, f.name)
         out["symbols"] = list(self.symbols)
+        out["symbols_deny"] = list(self.symbols_deny)
         out["api_key_set"] = bool(self.api_key)
         out["kill_active"] = self.kill_active
-        out["per_symbol"] = {
-            sym: {
-                "commission_env_fallback": self.commission_env_for(sym),
-                "margin_per_lot_usd": self.margin_per_lot_for(sym),
-                "symbol_leverage": self.symbol_leverage_for(sym),
-            }
-            for sym in self.symbols
-        }
         return out
 
 

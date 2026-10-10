@@ -21,7 +21,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, asdict
 from decimal import Decimal, ROUND_DOWN
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 
 def D(x: Any) -> Decimal:
@@ -63,8 +63,35 @@ def _opt(spec: Dict[str, Any], key: str) -> Optional[Decimal]:
     return d
 
 
-def parse_spec(spec: Dict[str, Any]) -> SpecValues:
-    """Extract the fields sizing needs and derive $/price-unit/lot."""
+REQUIRED_SPEC_FIELDS = ("contractSize", "tickSize", "tickValue", "minVolume", "volumeStep")
+
+
+def missing_spec_fields(spec: Dict[str, Any]) -> List[str]:
+    """Fields a tradable symbol must expose (Odin 2026-10-10 19:07 ET: never guess a spec value).
+
+    ``tickValue`` is satisfied by any of lossTickValue / profitTickValue / tickValue.
+    """
+
+    missing: List[str] = []
+    for key in ("contractSize", "tickSize", "minVolume", "volumeStep"):
+        v = _opt(spec, key)
+        if v is None or v <= 0:
+            missing.append(key)
+    if not any((_opt(spec, k) or Decimal("0")) > 0 for k in ("lossTickValue", "profitTickValue", "tickValue")):
+        missing.append("tickValue")
+    return missing
+
+
+def parse_spec(spec: Dict[str, Any], *, strict: bool = False) -> SpecValues:
+    """Extract the fields sizing needs and derive $/price-unit/lot.
+
+    ``strict=True`` additionally requires every field in ``REQUIRED_SPEC_FIELDS``.
+    """
+
+    if strict:
+        missing = missing_spec_fields(spec)
+        if missing:
+            raise SizingError(f"symbol specification is missing {missing}")
 
     tick_size = _opt(spec, "tickSize")
     tick_value: Optional[Decimal] = None

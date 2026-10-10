@@ -24,7 +24,9 @@ WorkingDirectory=/home/solveetcoagula/odin_ftmo/btc-advisor-autoexec
 Environment=AUTOEXEC_ACCOUNT_ID=a60dfd98-8a34-4c1b-9f2c-b40cdcc2c3bf
 Environment=AUTOEXEC_EXPECTED_LOGIN=541458001
 Environment=AUTOEXEC_SYMBOL=BTCUSD
-Environment=AUTOEXEC_SYMBOLS=BTCUSD,ETHUSD,SOLUSD
+# Empty allowlist = any symbol the broker lists (Odin 2026-10-10 19:07 ET). Optional lists:
+# Environment=AUTOEXEC_SYMBOLS=BTCUSD,ETHUSD,SOLUSD,UNIUSD,XAUUSD,US100.cash
+# Environment=AUTOEXEC_SYMBOLS_DENY=
 Environment=AUTOEXEC_CLIENT_HOST=https://mt-client-api-v1.london.agiliumtrade.ai
 # Token comes from this file (metaapi.token); never from the unit, never logged.
 Environment=AUTOEXEC_TOKEN_SOURCE=/home/solveetcoagula/odin_ftmo/config_us100.json
@@ -37,21 +39,24 @@ Environment=AUTOEXEC_KILL=0
 Environment=AUTOEXEC_MAX_RISK_USD=250
 Environment=AUTOEXEC_DAILY_LOSS_CAP_USD=500
 Environment=AUTOEXEC_EQUITY_HALT_USD=90750
-Environment=AUTOEXEC_COMMISSION_PER_LOT_ROUNDTRIP=27
-# Per-symbol commission (round trip per 1.0 lot). NOT guessed: read from the broker /
-# preflight and set via a drop-in. Unset => ETH/SOL entries skip with COMMISSION_UNAVAILABLE.
-# Environment=AUTOEXEC_COMMISSION_PER_LOT_ROUNDTRIP_ETHUSD=
-# Environment=AUTOEXEC_COMMISSION_PER_LOT_ROUNDTRIP_SOLUSD=
+# Commission models (19:07 ET): pct of notional per side for crypto (default 0.065),
+# flat per-lot for symbols you set explicitly. FX/indices/metals skip until set.
+Environment=AUTOEXEC_COMMISSION_PCT_PER_SIDE=0.065
+Environment=AUTOEXEC_COMMISSION_PER_LOT_ROUNDTRIP=27     # legacy BTCUSD flat fallback
+# Environment=AUTOEXEC_COMMISSION_PER_LOT_ROUNDTRIP_XAUUSD=
+# Environment=AUTOEXEC_COMMISSION_PER_LOT_ROUNDTRIP_US100_CASH=
+# Environment=AUTOEXEC_COMMISSION_MODEL_INDEX=            # pct|flat (+ AUTOEXEC_COMMISSION_PCT_PER_SIDE_INDEX)
 Environment=AUTOEXEC_COMMISSION_SOURCE=auto
 Environment=AUTOEXEC_MAX_POSITIONS_TOTAL=2
 Environment=AUTOEXEC_SECOND_POSITION_MIN_RR=2.0
 Environment=AUTOEXEC_MIN_MARGIN_LEVEL_PCT=200
-# Margin estimate for the second-position rule. Leave unset to skip second
-# entries until Trading Ops confirms a value from the preflight output.
-# Environment=AUTOEXEC_SYMBOL_LEVERAGE=2            # BTCUSD
-# Environment=AUTOEXEC_MARGIN_PER_LOT_USD=           # BTCUSD
-# Environment=AUTOEXEC_SYMBOL_LEVERAGE_ETHUSD=
-# Environment=AUTOEXEC_SYMBOL_LEVERAGE_SOLUSD=
+Environment=AUTOEXEC_SECOND_POSITION_SCOPE=all
+# Margin cap on every entry (19:07 ET): MetaAPI calculate-margin first; calibration
+# fallbacks per symbol if the broker calc is unavailable (entries skip until one exists).
+Environment=AUTOEXEC_MARGIN_CALC_BROKER=1
+# Environment=AUTOEXEC_SYMBOL_LEVERAGE_BTCUSD=2
+# Environment=AUTOEXEC_SYMBOL_LEVERAGE_XAUUSD=
+# Environment=AUTOEXEC_MARGIN_PER_LOT_USD_US100_CASH=
 
 # --- reliability (Trading Ops 2026-10-10): caches + 429/5xx retry; defaults shown ---
 Environment=AUTOEXEC_SPEC_CACHE_SEC=1800

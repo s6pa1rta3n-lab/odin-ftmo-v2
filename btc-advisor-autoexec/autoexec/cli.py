@@ -4,6 +4,7 @@
     python3 -m autoexec setup [--symbol ETHUSD] --side BUY --entry-type MARKET --stop 84000 --target 88000 [--dry-run]
     python3 -m autoexec tighten [--symbol ETHUSD] --stop 85500 [--position-id ID] [--dry-run]
     python3 -m autoexec status
+    python3 -m autoexec symbol XAUUSD US100.cash [--stop-distance 25] [--side BUY]   # read-only per-symbol report
     python3 -m autoexec kill            # create the kill file (blocks every mutation)
     python3 -m autoexec unkill          # remove the kill file
     python3 -m autoexec halt-clear --yes  # manual re-enable after an equity halt
@@ -64,6 +65,10 @@ def main(argv: Optional[List[str]] = None) -> int:
     p_t.add_argument("--dry-run", action="store_true")
 
     sub.add_parser("status", help="read-only guard states")
+    p_sym = sub.add_parser("symbol", help="read-only per-symbol report (spec, spread, commission, lot math, margin, pass/fail)")
+    p_sym.add_argument("symbols", nargs="*", help="symbols; default: the configured default symbol")
+    p_sym.add_argument("--stop-distance", type=float, help="sample stop distance in price units (default AUTOEXEC_SAMPLE_STOP_PCT of price)")
+    p_sym.add_argument("--side", default="BUY", choices=["BUY", "SELL", "buy", "sell"])
     sub.add_parser("kill", help="create the kill file")
     sub.add_parser("unkill", help="remove the kill file")
     p_hc = sub.add_parser("halt-clear", help="remove the equity HALT latch (manual re-enable)")
@@ -108,6 +113,13 @@ def main(argv: Optional[List[str]] = None) -> int:
         st.pop("reads", None)
         _print(st)
         return 0 if st.get("ok") else 1
+    if args.cmd == "symbol":
+        from decimal import Decimal
+
+        stop = Decimal(str(args.stop_distance)) if args.stop_distance else None
+        results = [executor.symbol_info(sym, stop_distance=stop, side=args.side.upper()) for sym in (args.symbols or [None])]
+        _print(results[0] if len(results) == 1 else {"ok": all(r.get("ok") for r in results), "symbols": results})
+        return 0 if all(r.get("ok") for r in results) else 2
     if args.cmd == "setup":
         payload = {
             "side": args.side.upper(),

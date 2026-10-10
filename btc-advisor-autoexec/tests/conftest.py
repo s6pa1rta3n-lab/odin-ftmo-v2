@@ -67,6 +67,14 @@ class FakeBroker:
         self.specs: Dict[str, Dict[str, Any]] = {}
         self.quotes: Dict[str, Dict[str, Any]] = {}
         self.unknown_symbols: set = set()  # symbols the "broker" does not know (404)
+        # Broker symbol list: None -> derived from known specs + the three defaults.
+        self.symbol_list: Optional[List[str]] = None
+        # MetaAPI calculate-margin: notional / leverage per symbol (default 1:2 like FTMO crypto);
+        # set calc_margin_supported=False to exercise the calibration fallbacks.
+        self.calc_margin_supported = True
+        self.margin_leverage_default = 2.0
+        self.margin_leverage: Dict[str, float] = {}
+        self.calc_margin_calls: List[Dict[str, Any]] = []
         self.deals = list(deals or [])
         self.trade_calls: List[Dict[str, Any]] = []
         self.trade_response: Dict[str, Any] = {"numericCode": 10009, "stringCode": "TRADE_RETCODE_DONE", "orderId": "9001", "positionId": "9001"}
@@ -102,6 +110,23 @@ class FakeBroker:
             self.specs[symbol] = dict(spec, symbol=symbol)
         if quote is not None:
             self.quotes[symbol] = dict(quote, symbol=symbol)
+
+    def symbols(self) -> List[str]:
+        self._maybe_fail("symbols")
+        if self.symbol_list is not None:
+            return list(self.symbol_list)
+        names = {"BTCUSD", "ETHUSD", "SOLUSD", *self.specs.keys()}
+        return sorted(n for n in names if n not in self.unknown_symbols)
+
+    def calculate_margin(self, symbol: str, order_type: str, volume: float, open_price: float) -> Dict[str, Any]:
+        self._maybe_fail("calculate_margin")
+        self.calc_margin_calls.append({"symbol": symbol, "type": order_type, "volume": volume, "openPrice": open_price})
+        if not self.calc_margin_supported:
+            raise BrokerError("HTTP 404 POST /calculate-margin: not supported", status=404)
+        spec = self.specs.get(symbol, self.spec)
+        contract = float(spec.get("contractSize") or 1)
+        lev = self.margin_leverage.get(symbol, self.margin_leverage_default)
+        return {"margin": volume * contract * open_price / lev}
 
     def symbol_specification(self, symbol: str) -> Dict[str, Any]:
         self._maybe_fail("symbol_specification")

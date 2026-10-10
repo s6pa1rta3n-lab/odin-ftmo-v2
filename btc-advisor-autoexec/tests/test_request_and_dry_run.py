@@ -134,8 +134,10 @@ def test_failed_live_read_fails_closed(tmp_path, broker, step):
     broker.fail_reads.add(step)
     ex = make_executor(tmp_path, broker, env={"AUTOEXEC_ORDERS_ENABLED": "1"})
     d = ex.decide_entry(entry("BUY"))
-    assert d["accepted"] is False and d["code"] == "READ_FAILED"
-    assert step in d["reason"]
+    assert d["accepted"] is False
+    # a failed spec read is reported as SPEC_UNAVAILABLE (symbol validation); everything else READ_FAILED
+    assert d["code"] == ("SPEC_UNAVAILABLE" if step == "symbol_specification" else "READ_FAILED")
+    assert step in d["reason"] or "specification" in d["reason"]
     assert broker.trade_calls == []
 
 

@@ -46,7 +46,7 @@ def test_second_position_allowed_when_all_conditions_hold(tmp_path, broker):
     assert sp["combined_open_risk_usd"] == pytest.approx(d["risk_usd"])
     assert sp["combined_open_risk_usd"] <= 250.0
     assert sp["reward_risk"] >= 2.0
-    assert sp["margin"]["method"] == "notional / AUTOEXEC_SYMBOL_LEVERAGE"
+    assert sp["margin"]["method"] == "metaapi.calculate-margin"  # broker-reported first (19:07 ET #3)
     assert sp["margin"]["projected_level_pct"] > 200
     assert sp["fresh_setup_verified"] is False
     assert len(broker.trade_calls) == 1
@@ -76,10 +76,13 @@ def test_third_position_rejected_max_two_total(tmp_path, broker, positions):
     assert broker.trade_calls == []
 
 
-def test_other_symbol_positions_do_not_count(tmp_path, broker):
+def test_other_symbol_positions_count_account_wide(tmp_path, broker):
+    # Odin 19:07 ET #5: every open position on the account counts, whatever the symbol
     broker.positions_list = [position(pid="X1", symbol="XAUUSD", magic=0), position(pid="X2", symbol="US100.cash", magic=0)]
     ex = _ex(tmp_path, broker)
-    assert ex.decide_entry(entry(**SECOND))["code"] == "PLACED"
+    assert ex.decide_entry(entry(**SECOND))["code"] == "MAX_POSITIONS"
+    broker.positions_list = [position(pid="X1", symbol="XAUUSD", magic=0, open_price=4000.0, stop_loss=3990.0)]
+    assert ex.decide_entry(entry(**SECOND))["code"] == "SECOND_SL_NOT_BREAKEVEN"
 
 
 # ---------------------------------------------------------------- #1 breakeven + combined risk
@@ -211,48 +214,57 @@ def test_daily_cap_room_helper():
 
 def test_margin_unknown_skips_second_entry(tmp_path, broker):
     broker.positions_list = [position(**GOOD_FIRST)]
+    broker.calc_margin_supported = False  # broker cannot compute margin
     ex = make_executor(tmp_path, broker, env={"AUTOEXEC_ORDERS_ENABLED": "1"})  # no leverage/override configured
     d = ex.decide_entry(entry(**SECOND))
-    assert d["code"] == "SECOND_MARGIN_UNKNOWN", d
-    assert d["detail"]["second_position"]["margin"]["method"] == "unavailable"
+    # the account-wide margin cap (19:07 ET #3) rejects before the second-position check
+    assert d["code"] == "MARGIN_UNKNOWN", d
+    assert d["margin"]["per_lot"]["method"] == "unavailable"
     assert broker.trade_calls == []
 
 
-def test_margin_level_at_or_below_200_rejects(tmp_path, broker):
+def test_margin_level_below_200_is_capped_by_shrinking_lots(tmp_path, broker):
+    # 19:07 ET #3: instead of rejecting, lots shrink until the projected level is >= 200 %.
     broker.positions_list = [position(**GOOD_FIRST)]
-    # existing margin 30000; new = 0.44 * 85020 / 2 = 18704.4; projected 48704.4; level = 95000/48704.4 = 195%
+    # existing margin 30000; 0.44 lots would be 18704.4 -> 195 %; max new margin = 95000/2 - 30000 = 17500 -> 0.41 lots
     broker.account = dict(ACCOUNT, margin=30000.0)
     ex = _ex(tmp_path, broker)
     d = ex.decide_entry(entry(**SECOND))
-    assert d["code"] == "SECOND_MARGIN_LEVEL", d
-    assert d["detail"]["second_position"]["margin"]["projected_level_pct"] == pytest.approx(95000 / (30000 + 0.44 * 85020 / 2) * 100)
+    assert d["code"] == "PLACED", d
+    assert d["lots"] == 0.41 and d["margin"]["cap"]["capped"] is True
+    assert d["second_position"]["margin"]["projected_level_pct"] >= 200
+    assert broker.trade_calls[0]["volume"] == 0.41
 
 
 def test_margin_from_spec_initial_margin(tmp_path, broker):
     broker.positions_list = [position(**GOOD_FIRST)]
+    broker.calc_margin_supported = False
     broker.spec = dict(SPEC, initialMargin=42510.0)  # per 1.0 lot
     ex = make_executor(tmp_path, broker, env={"AUTOEXEC_ORDERS_ENABLED": "1"})
     d = ex.decide_entry(entry(**SECOND))
     assert d["code"] == "PLACED", d
     m = d["second_position"]["margin"]
-    assert m["method"] == "spec.initialMargin x lots"
+    assert m["method"] == "spec.initialMargin"
     assert m["new_margin_usd"] == pytest.approx(42510.0 * 0.44)
 
 
 def test_margin_override_takes_priority(tmp_path, broker):
     broker.positions_list = [position(**GOOD_FIRST)]
+    broker.calc_margin_supported = False
     broker.spec = dict(SPEC, initialMargin=42510.0)
     ex = _ex(tmp_path, broker, AUTOEXEC_MARGIN_PER_LOT_USD="100000")
     d = ex.decide_entry(entry(**SECOND))
     # 0.44 * 100000 = 44000 -> level 215.9% -> passes, and method is the override
     assert d["second_position"]["margin"]["method"].startswith("override")
     assert d["code"] == "PLACED"
-    ex2 = _ex(tmp_path / "b", broker, AUTOEXEC_MARGIN_PER_LOT_USD="110000")  # 48400 -> 196% -> reject
-    assert ex2.decide_entry(entry(**SECOND))["code"] == "SECOND_MARGIN_LEVEL"
+    ex2 = _ex(tmp_path / "b", broker, AUTOEXEC_MARGIN_PER_LOT_USD="110000")  # 0.44 -> 48400 -> 196%: cap shrinks to 0.43 (47300 -> 200.8%)
+    d2 = ex2.decide_entry(entry(**SECOND))
+    assert d2["code"] == "PLACED" and d2["lots"] == 0.43 and d2["margin"]["cap"]["capped"] is True
 
 
 def test_account_leverage_only_when_opted_in(tmp_path, broker):
     broker.positions_list = [position(**GOOD_FIRST)]
+    broker.calc_margin_supported = False
     ex = make_executor(tmp_path, broker, env={"AUTOEXEC_ORDERS_ENABLED": "1", "AUTOEXEC_MARGIN_USE_ACCOUNT_LEVERAGE": "1"})
     d = ex.decide_entry(entry(**SECOND))
     assert d["code"] == "PLACED"
