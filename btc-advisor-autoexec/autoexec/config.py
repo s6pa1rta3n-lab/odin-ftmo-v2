@@ -137,15 +137,17 @@ class Config:
     sample_stop_pct: float = 1.0  # default sample stop distance for /symbol as % of price
 
     # Commission (Odin 19:07 ET): broker/deals-derived when available, else a model per
-    # symbol or asset class. ``pct`` = percentage of notional per side (default 0.065 %,
-    # Trading Ops' measured FTMO crypto rate); ``flat`` = per-lot round trip. The pct model
+    # symbol or asset class. ``pct`` = percentage of notional per side (default 0.0325 %,
+    # i.e. 0.065 % per round trip — Odin's decision 2026-10-10 19:30 ET after Trading Ops
+    # measured $54.31/lot round trip on ~83.5k BTC notional); ``flat`` = per-lot round
+    # trip. The pct model
     # is the default for crypto only; forex/index/metals need broker/deals data or an
     # explicit per-symbol value, otherwise the entry skips (COMMISSION_UNAVAILABLE).
     # The un-suffixed flat fallback (27) is BTCUSD's legacy figure (Odin 05:47 ET) and is
     # used only when BTCUSD resolves to the flat model.
     commission_per_lot_roundtrip: float = 27.0
     commission_per_lot_roundtrip_by_symbol: Dict[str, float] = field(default_factory=dict)  # keyed by env suffix
-    commission_pct_per_side: float = 0.065
+    commission_pct_per_side: float = 0.0325
     commission_pct_per_side_by_symbol: Dict[str, float] = field(default_factory=dict)  # keyed by env suffix (symbol or class)
     commission_model_by_symbol: Dict[str, str] = field(default_factory=dict)  # keyed by env suffix (symbol or class): pct | flat
     asset_class_by_symbol: Dict[str, str] = field(default_factory=dict)  # keyed by env suffix
@@ -218,7 +220,7 @@ class Config:
             sample_stop_pct=_env_float(e, "AUTOEXEC_SAMPLE_STOP_PCT", 1.0),
             commission_per_lot_roundtrip=_env_float(e, "AUTOEXEC_COMMISSION_PER_LOT_ROUNDTRIP", 27.0),
             commission_per_lot_roundtrip_by_symbol=_env_by_suffix_float(e, "AUTOEXEC_COMMISSION_PER_LOT_ROUNDTRIP"),
-            commission_pct_per_side=_env_float(e, "AUTOEXEC_COMMISSION_PCT_PER_SIDE", 0.065),
+            commission_pct_per_side=_env_float(e, "AUTOEXEC_COMMISSION_PCT_PER_SIDE", 0.0325),
             commission_pct_per_side_by_symbol=_env_by_suffix_float(e, "AUTOEXEC_COMMISSION_PCT_PER_SIDE"),
             commission_model_by_symbol={k: v.lower() for k, v in _env_by_suffix(e, "AUTOEXEC_COMMISSION_MODEL").items()},
             asset_class_by_symbol={k: v.lower() for k, v in _env_by_suffix(e, "AUTOEXEC_ASSET_CLASS").items()},

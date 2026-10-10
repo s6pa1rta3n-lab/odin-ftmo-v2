@@ -23,7 +23,7 @@ Authorization
 - Any symbol 19:07 ET: any symbol the broker lists, validated live against MetaAPI's
   symbol list and a complete specification; a **margin cap on every entry** (projected
   margin level >= 200 %, lots shrink, else skip); **commission as a percentage of
-  notional** (0.065 %/side default, crypto only; other classes need broker/deals data or an
+  notional** (0.065 % per round trip = 0.0325 %/side default, crypto only; other classes need broker/deals data or an
   explicit value); position limit and breakeven rule **account-wide** (every open position,
   all symbols, manual and auto, incl. other engines); `/symbol` endpoint; preflight for a
   symbol list. See [Symbols](#symbols), [Margin cap](#margin-cap-every-entry) and
@@ -124,7 +124,7 @@ python3 -m autoexec halt-clear --yes       # manual re-enable after an equity ha
 | `AUTOEXEC_KILL` | `0` | Kill switch (env). |
 | `AUTOEXEC_KILL_FILE` | `<state_dir>/KILL` | Kill switch (file). Presence blocks every entry and modify, no restart needed. |
 | `AUTOEXEC_MAX_RISK_USD` | `250` | Guard 2. |
-| `AUTOEXEC_COMMISSION_PCT_PER_SIDE` | `0.065` | Percentage-of-notional commission per side (round trip = 2 × rate × contractSize × fill price). Default model for **crypto** only. |
+| `AUTOEXEC_COMMISSION_PCT_PER_SIDE` | `0.0325` | Percentage-of-notional commission per side (round trip = 2 × rate × contractSize × fill price = 0.065 % per round trip). Default model for **crypto** only. Rate decided by Odin 2026-10-10 19:30 ET from Trading Ops' measured $54.31/lot round trip on ~83.5k notional. |
 | `AUTOEXEC_COMMISSION_PCT_PER_SIDE_<SYMBOL|CLASS>` | unset | Per-symbol or per-class rate (`_CRYPTO`, `_FOREX`, `_INDEX`, `_METALS`). |
 | `AUTOEXEC_COMMISSION_PER_LOT_ROUNDTRIP_<SYMBOL>` | unset | Flat per-lot round trip for a symbol (selects the `flat` model). |
 | `AUTOEXEC_COMMISSION_PER_LOT_ROUNDTRIP` | `27` | Legacy flat BTCUSD figure (Odin 05:47 ET); used only when BTCUSD resolves to the `flat` model (no asset class from the broker, or `AUTOEXEC_COMMISSION_MODEL_BTCUSD=flat`). |
@@ -199,7 +199,7 @@ Hedged-margin relief is ignored (conservative).
 Authorization: Odin 19:07 ET #4. Per symbol, `auto` resolves: a commission field on the spec
 (broker) → closed round trips of that symbol in the lookback (deals-derived) → the configured
 model. Models:
-- `pct`: round trip = 2 × `AUTOEXEC_COMMISSION_PCT_PER_SIDE` (0.065 %) × contractSize × fill
+- `pct`: round trip = 2 × `AUTOEXEC_COMMISSION_PCT_PER_SIDE` (0.0325 %, i.e. 0.065 % per round trip) × contractSize × fill
   price, in account currency (a symbol quoted in another currency is `COMMISSION_UNAVAILABLE`
   under `pct`; no FX conversion is attempted). **Default for crypto only** (Trading Ops
   measured FTMO crypto round trips at this rate).
@@ -212,14 +212,18 @@ The asset class comes from the broker's spec `path` (`Crypto\…`, `Forex\…`, 
 `commission.asset_class`, `commission.model`, `commission.source`, `pct_per_side`,
 `notional_per_lot`.
 
-**BTCUSD numeric difference (documented per Odin's request).** At 85,020 the `pct` model
-gives 2 × 0.065 % × 85,020 = **$110.53** round trip per lot versus the legacy flat **$27**
-(and versus Trading Ops' measured **$54.31**, which arithmetically equals 0.065 % of notional
-*per round trip*, i.e. 0.0325 % per side). With a 520-point stop and a 20-point spread:
-flat $27 → 0.44 lots; measured $54.31 → 0.42 lots; `pct` at 0.065 %/side → **0.38 lots**.
-The default follows the approved wording (per side); to reproduce the measured figure set
-`AUTOEXEC_COMMISSION_PCT_PER_SIDE=0.0325`. When the broker reports no asset class for
-BTCUSD the legacy flat $27 still applies (identical to #85).
+**Rate decision (Odin, 2026-10-10 19:30 ET, delegated after Trading Ops' measured data):**
+the crypto `pct` commission is **0.065 % of notional per round trip = 0.0325 % per side**.
+Trading Ops measured **$54.31 per lot round trip on ~83.5k BTC notional**
+(54.31 / 83,500 = 0.065 %).
+
+**BTCUSD numeric difference from the flat $27 (documented per Odin's request).** At 85,020
+the `pct` model gives 2 × 0.0325 % × 85,020 = **$55.26** round trip per lot versus the legacy
+flat **$27**. On the reference setup (520-point stop, 20-point spread): flat $27 → per-lot
+loss 567 → 0.44 lots; `pct` → per-lot loss 595.26 → 250 / 595.26 = 0.41998 → **0.41 lots**
+after the floor to the 0.01 step (about 0.42; exactly 0.42 with the measured $54.31 at
+~83.5k notional). When the broker reports no asset class for BTCUSD the legacy flat $27 still
+applies (identical to #85).
 
 ## Guards (server-side, in evaluation order)
 
@@ -484,8 +488,8 @@ Each is left configurable with a safe default rather than guessed (mirrored in t
     `/home/solveetcoagula/odin_ftmo/config_us100.json` (`metaapi.token`). Confirm both
     (the token must have access to account `a60dfd98-…`).
 13. **Per-asset-class confirmation (Trading Ops, before arming a class):**
-    crypto — the `pct` model at 0.065 %/side is the default; confirm per side vs per round
-    trip (see the BTCUSD numeric note) and confirm the spec `path` says `Crypto`;
+    crypto — the `pct` model at 0.0325 %/side (0.065 % per round trip, Odin 19:30 ET) is the
+    default; confirm the spec `path` says `Crypto`;
     FX / indices / metals — no default model: set `AUTOEXEC_COMMISSION_PER_LOT_ROUNDTRIP_<SYMBOL>`
     (or a class model + rate) from the broker's schedule or wait for deals-derived data;
     margin — confirm MetaAPI `calculate-margin` works on this account (the preflight prints the

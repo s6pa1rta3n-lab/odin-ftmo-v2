@@ -12,7 +12,8 @@ percentage-of-notional model, default for crypto only):
    deals of positions that have *both* legs in the window, divided by the IN
    volume. Positions with only one leg in the window are ignored so a
    per-side charge is never mistaken for a round trip.
-3. model    — ``pct``: 2 x AUTOEXEC_COMMISSION_PCT_PER_SIDE (0.065 %) x notional per
+3. model    — ``pct``: 2 x AUTOEXEC_COMMISSION_PCT_PER_SIDE (0.0325 %, = 0.065 % per
+   round trip per Odin 2026-10-10 19:30 ET) x notional per
    lot (contractSize x fill price); ``flat``: AUTOEXEC_COMMISSION_PER_LOT_ROUNDTRIP_<SYMBOL>
    (the un-suffixed 27.0 is BTCUSD's legacy figure). Which model applies comes from
    ``Config.commission_model_for`` (per symbol, else per asset class; crypto -> pct).

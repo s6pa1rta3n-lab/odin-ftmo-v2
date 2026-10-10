@@ -39,9 +39,10 @@ Environment=AUTOEXEC_KILL=0
 Environment=AUTOEXEC_MAX_RISK_USD=250
 Environment=AUTOEXEC_DAILY_LOSS_CAP_USD=500
 Environment=AUTOEXEC_EQUITY_HALT_USD=90750
-# Commission models (19:07 ET): pct of notional per side for crypto (default 0.065),
+# Commission models (19:07 ET; rate per Odin 19:30 ET): pct of notional per side for
+# crypto (default 0.0325 = 0.065 % per round trip; measured $54.31/lot RT on ~83.5k),
 # flat per-lot for symbols you set explicitly. FX/indices/metals skip until set.
-Environment=AUTOEXEC_COMMISSION_PCT_PER_SIDE=0.065
+Environment=AUTOEXEC_COMMISSION_PCT_PER_SIDE=0.0325
 Environment=AUTOEXEC_COMMISSION_PER_LOT_ROUNDTRIP=27     # legacy BTCUSD flat fallback
 # Environment=AUTOEXEC_COMMISSION_PER_LOT_ROUNDTRIP_XAUUSD=
 # Environment=AUTOEXEC_COMMISSION_PER_LOT_ROUNDTRIP_US100_CASH=

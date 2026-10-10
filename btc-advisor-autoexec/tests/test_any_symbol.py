@@ -65,16 +65,17 @@ def test_pct_commission_is_two_sides_of_notional(tmp_path):
     d = ex.decide_entry(entry("BUY"))  # BTCUSD, path Crypto -> pct model
     c = d["commission"]
     assert c["model"] == "pct" and c["source"] == "pct" and c["asset_class"] == "crypto"
-    assert c["pct_per_side"] == 0.065 and c["notional_per_lot"] == 85020.0
-    assert d["commission_per_lot_roundtrip"] == pytest.approx(2 * 0.00065 * 85020)  # 110.526
-    # stop 520 + spread 20 + commission 110.526 = 650.526 -> floor(250/650.526) = 0.38
-    assert d["per_lot_loss"] == pytest.approx(650.526) and d["lots"] == 0.38
+    # Odin 19:30 ET: 0.065 % per ROUND TRIP = 0.0325 % per side (measured $54.31/lot RT on ~83.5k)
+    assert c["pct_per_side"] == 0.0325 and c["notional_per_lot"] == 85020.0
+    assert d["commission_per_lot_roundtrip"] == pytest.approx(2 * 0.000325 * 85020)  # 55.263
+    # stop 520 + spread 20 + commission 55.263 = 595.263 -> floor(250/595.263 = 0.41998) = 0.41
+    assert d["per_lot_loss"] == pytest.approx(595.263) and d["lots"] == 0.41
     assert d["code"] == "PLACED"
 
 
 def test_pct_rate_configurable_globally_per_class_and_per_symbol(tmp_path):
-    ex = _ex(tmp_path, enabled=False, env={"AUTOEXEC_COMMISSION_PCT_PER_SIDE": "0.0325"})
-    assert ex.decide_entry(entry("BUY"))["commission_per_lot_roundtrip"] == pytest.approx(2 * 0.000325 * 85020)  # 55.263 ~ the measured 54.31
+    ex = _ex(tmp_path, enabled=False, env={"AUTOEXEC_COMMISSION_PCT_PER_SIDE": "0.065"})
+    assert ex.decide_entry(entry("BUY"))["commission_per_lot_roundtrip"] == pytest.approx(2 * 0.00065 * 85020)  # 110.526 if per-side were 0.065
     ex2 = _ex(tmp_path / "b", enabled=False, env={"AUTOEXEC_COMMISSION_PCT_PER_SIDE_CRYPTO": "0.05"})
     assert ex2.decide_entry(entry("BUY"))["commission"]["pct_per_side"] == 0.05
     ex3 = _ex(tmp_path / "c", enabled=False, env={"AUTOEXEC_COMMISSION_PCT_PER_SIDE_CRYPTO": "0.05", "AUTOEXEC_COMMISSION_PCT_PER_SIDE_BTCUSD": "0.01"})
@@ -170,11 +171,11 @@ def test_margin_cap_shrinks_first_entry_lots(tmp_path):
     assert d["margin"]["method"] == "metaapi.calculate-margin"
     assert d["margin"]["per_lot"]["per_lot_usd"] == pytest.approx(42510.0)
     cap = d["margin"]["cap"]
-    assert cap["capped"] is True and cap["lots_before"] == 0.38 and cap["lots_after"] == 0.17
-    assert d["lots"] == 0.17 and d["risk_usd"] == pytest.approx(0.17 * 650.526)
+    assert cap["capped"] is True and cap["lots_before"] == 0.41 and cap["lots_after"] == 0.17
+    assert d["lots"] == 0.17 and d["risk_usd"] == pytest.approx(0.17 * 595.263)
     assert d["margin"]["projected_level_pct"] >= 200 and cap["projected_level_pct"] == pytest.approx(95000 / (40000 + 0.17 * 42510) * 100)
     assert b.trade_calls[0]["volume"] == 0.17
-    assert b.calc_margin_calls[0] == {"symbol": "BTCUSD", "type": "ORDER_TYPE_BUY", "volume": 0.38, "openPrice": 85020.0}
+    assert b.calc_margin_calls[0] == {"symbol": "BTCUSD", "type": "ORDER_TYPE_BUY", "volume": 0.41, "openPrice": 85020.0}
 
 
 def test_margin_cap_skips_when_min_lot_breaks_200(tmp_path):
@@ -188,7 +189,7 @@ def test_margin_cap_skips_when_min_lot_breaks_200(tmp_path):
 
 
 def test_margin_cap_exact_boundary_is_allowed(tmp_path):
-    # account margin 0; max new margin = 47500 -> 1.11 lots at 42510; sizing gives 0.38 so no cap
+    # account margin 0; max new margin = 47500 -> 1.11 lots at 42510; sizing gives 0.41 so no cap
     ex = _ex(tmp_path)
     d = ex.decide_entry(entry("BUY"))
     assert d["margin"]["cap"]["capped"] is False and d["margin"]["cap"]["max_lots"] == 1.11
@@ -238,8 +239,8 @@ def test_any_listed_symbol_accepted_with_canonical_name(tmp_path):
     ex = _ex(tmp_path)
     d = ex.decide_entry(uni(symbol="uniusd"))
     assert d["code"] == "PLACED" and d["symbol"] == "UNIUSD" and d["order"]["symbol"] == "UNIUSD"
-    # UNI: fill 7.53, stop 7.0 -> 0.53 + 0.03 + 2*0.00065*7.53 = 0.569789 -> floor(250/0.569789, 1) = 438 lots
-    assert d["lots"] == 438.0 and d["risk_usd"] <= 250
+    # UNI: fill 7.53, stop 7.0 -> 0.53 + 0.03 + 2*0.000325*7.53 = 0.5648945 -> floor(250/0.5648945, 1) = 442 lots
+    assert d["lots"] == 442.0 and d["risk_usd"] <= 250
 
 
 def test_symbol_not_listed_rejected(tmp_path):
@@ -443,10 +444,12 @@ def test_btc_regression_without_asset_class_is_identical(tmp_path):
 
 
 def test_btc_intended_difference_with_crypto_path(tmp_path):
-    # Documented change: Crypto path -> pct model (0.065 %/side x 2 = $110.53 at 85,020) -> 0.38 lots instead of 0.44.
+    # Documented change (Odin 19:30 ET): Crypto path -> pct model at 0.0325 %/side x 2 = $55.26 at 85,020
+    # (measured $54.31 on ~83.5k) -> per-lot loss 595.26 -> 0.41 lots (about 0.42) instead of 0.44.
     ex = _ex(tmp_path)
     d = ex.decide_entry(entry("BUY"))
-    assert d["lots"] == 0.38 and d["commission_per_lot_roundtrip"] == pytest.approx(110.526)
+    assert d["lots"] == 0.41 and d["commission_per_lot_roundtrip"] == pytest.approx(55.263)
+    assert d["commission"]["pct_per_side"] == 0.0325
     assert d["order"]["stopLoss"] == 84500.0 and d["order"]["takeProfit"] == 86500.0 and d["order"]["magic"] == 20261010
 
 
