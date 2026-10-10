@@ -118,6 +118,16 @@ class Config:
     http_timeout_sec: float = 30.0
     trade_timeout_sec: float = 120.0
 
+    # Reliability (Trading Ops 2026-10-10 09:57 ET): caches and 429/5xx retry.
+    # None of these change guards, sizing, decisions or the state-file format.
+    spec_cache_sec: float = 1800.0  # symbol specification
+    commission_cache_sec: float = 1800.0  # deals-derived commission lookback
+    status_cache_sec: float = 15.0  # /status snapshot only; /setup and /tighten read fresh
+    retry_attempts: int = 3
+    retry_budget_sec: float = 10.0
+    retry_base_sec: float = 1.0
+    retry_max_sec: float = 4.0
+
     extra: Dict[str, Any] = field(default_factory=dict)
 
     @classmethod
@@ -157,6 +167,13 @@ class Config:
             token_source=_env_str(e, "AUTOEXEC_TOKEN_SOURCE", DEFAULT_TOKEN_SOURCE),
             http_timeout_sec=_env_float(e, "AUTOEXEC_HTTP_TIMEOUT_SEC", 30.0),
             trade_timeout_sec=_env_float(e, "AUTOEXEC_TRADE_TIMEOUT_SEC", 120.0),
+            spec_cache_sec=_env_float(e, "AUTOEXEC_SPEC_CACHE_SEC", 1800.0),
+            commission_cache_sec=_env_float(e, "AUTOEXEC_COMMISSION_CACHE_SEC", 1800.0),
+            status_cache_sec=_env_float(e, "AUTOEXEC_STATUS_CACHE_SEC", 15.0),
+            retry_attempts=_env_int(e, "AUTOEXEC_RETRY_ATTEMPTS", 3),
+            retry_budget_sec=_env_float(e, "AUTOEXEC_RETRY_BUDGET_SEC", 10.0),
+            retry_base_sec=_env_float(e, "AUTOEXEC_RETRY_BASE_SEC", 1.0),
+            retry_max_sec=_env_float(e, "AUTOEXEC_RETRY_MAX_SEC", 4.0),
         )
         cfg.validate()
         return cfg
@@ -180,6 +197,12 @@ class Config:
             raise ValueError("AUTOEXEC_SECOND_POSITION_MIN_RR must be > 0")
         if self.min_margin_level_pct <= 0:
             raise ValueError("AUTOEXEC_MIN_MARGIN_LEVEL_PCT must be > 0")
+        if self.spec_cache_sec < 0 or self.commission_cache_sec < 0 or self.status_cache_sec < 0:
+            raise ValueError("AUTOEXEC_*_CACHE_SEC must be >= 0 (0 disables the cache)")
+        if self.retry_attempts < 1:
+            raise ValueError("AUTOEXEC_RETRY_ATTEMPTS must be >= 1 (1 = no retry)")
+        if self.retry_budget_sec < 0 or self.retry_base_sec < 0 or self.retry_max_sec < 0:
+            raise ValueError("AUTOEXEC_RETRY_*_SEC must be >= 0")
         if self.magic == 0:
             raise ValueError("AUTOEXEC_MAGIC must be non-zero; magic 0 is reserved for manual positions")
         if not self.comment:

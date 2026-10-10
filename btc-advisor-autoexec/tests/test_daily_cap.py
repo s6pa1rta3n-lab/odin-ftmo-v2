@@ -156,5 +156,5 @@ def test_cap_reset_across_dst_end(tmp_path):
     d = ex.decide_entry(entry("BUY"))
     assert d["code"] == "PLACED", d
     assert d["guards"]["trading_day"] == "2026-10-26"
-    # history_deals is called twice per decision: [today window, commission lookback]
-    assert broker.history_windows[-2][0] == datetime(2026, 10, 25, 23, 0, tzinfo=timezone.utc)
+    # The commission lookback is cached; the last history_deals call is today's window.
+    assert broker.history_windows[-1][0] == datetime(2026, 10, 25, 23, 0, tzinfo=timezone.utc)

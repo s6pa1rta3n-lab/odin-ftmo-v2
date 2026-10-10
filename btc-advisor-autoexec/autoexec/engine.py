@@ -6,6 +6,12 @@ data; the would-be order payload is logged and nothing is sent.
 
 Fail closed: any failed live read rejects the request. A rejected or dry-run
 decision never calls ``broker.trade``.
+
+Reliability (Trading Ops 2026-10-10 09:57 ET): reads and the idempotent
+``POSITION_MODIFY`` retry 429/5xx with backoff and ``Retry-After``; the symbol
+spec and the commission lookback are cached (~30 min); ``status()`` serves a
+short-lived snapshot. New-order placement is never retried. None of this
+changes guards, sizing, decisions, or the state-file format.
 """
 
 from __future__ import annotations
@@ -15,7 +21,7 @@ import time
 import uuid
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from . import guards
 from . import second_position as second
@@ -24,6 +30,7 @@ from .commission import resolve_commission
 from .config import Config
 from .guards import Rejected
 from .jsonlog import JsonLogger
+from .retry import RetryPolicy, run_with_retry
 from .sizing import D, SizingError, parse_spec, size_position
 from .state import HaltLatch, StateStore
 from .trading_day import day_window_utc, trading_day, tz
@@ -39,6 +46,8 @@ class Executor:
         state: Optional[StateStore] = None,
         halt: Optional[HaltLatch] = None,
         now_fn: Optional[Callable[[], datetime]] = None,
+        sleep_fn: Optional[Callable[[float], None]] = None,
+        monotonic_fn: Optional[Callable[[], float]] = None,
     ) -> None:
         self.cfg = cfg
         self.broker = broker
@@ -46,14 +55,60 @@ class Executor:
         self.state = state or StateStore(f"{cfg.state_dir}/state.json")
         self.halt = halt or HaltLatch(cfg.halt_file)
         self.now_fn = now_fn or (lambda: datetime.now(timezone.utc))
+        self.sleep_fn = sleep_fn or time.sleep
+        self.monotonic_fn = monotonic_fn or time.monotonic
         self.zone = tz(cfg.day_tz)
         self._lock = threading.Lock()
+        self.retry_policy = RetryPolicy(
+            attempts=cfg.retry_attempts,
+            budget_sec=cfg.retry_budget_sec,
+            base_sec=cfg.retry_base_sec,
+            max_sec=cfg.retry_max_sec,
+        )
+        self.retry_policy.validate()
+        # In-memory caches (never persisted; the state-file format is unchanged).
+        self._cache_lock = threading.Lock()
+        self._spec_cache: Optional[Tuple[float, Dict[str, Any]]] = None
+        self._lookback_cache: Optional[Tuple[float, List[Dict[str, Any]]]] = None
+        self._status_cache: Optional[Tuple[float, Optional[Dict[str, Any]], Optional[Rejected]]] = None
 
     # ------------------------------------------------------------------ utils
 
     def _now(self) -> datetime:
         n = self.now_fn()
         return n if n.tzinfo else n.replace(tzinfo=timezone.utc)
+
+    def _retry(self, label: str, fn: Callable[[], Any]) -> Any:
+        """429/5xx retry for reads and the idempotent position modify. Never used for entries."""
+
+        return run_with_retry(
+            fn,
+            policy=self.retry_policy,
+            label=label,
+            logger=self.log,
+            sleep=self.sleep_fn,
+            monotonic=self.monotonic_fn,
+        )
+
+    def _cached(self, slot: str, ttl: float) -> Optional[Any]:
+        with self._cache_lock:
+            entry = getattr(self, slot)
+        if entry is None or ttl <= 0:
+            return None
+        at, value = entry[0], entry[1]
+        if self.monotonic_fn() - at >= ttl:
+            return None
+        return value
+
+    def _store(self, slot: str, value: Any) -> None:
+        with self._cache_lock:
+            setattr(self, slot, (self.monotonic_fn(), value))
+
+    def invalidate_caches(self) -> None:
+        with self._cache_lock:
+            self._spec_cache = None
+            self._lookback_cache = None
+            self._status_cache = None
 
     @property
     def armed(self) -> bool:
@@ -69,24 +124,38 @@ class Executor:
 
         now = self._now()
         out: Dict[str, Any] = {"now": now}
+        cache_hits: List[str] = []
         step = "account_information"
         try:
-            out["account"] = self.broker.account_information()
+            out["account"] = self._retry(step, self.broker.account_information)
             step = "positions"
-            out["positions"] = self.broker.positions()
+            out["positions"] = self._retry(step, self.broker.positions)
             step = "current_price"
-            out["quote_raw"] = self.broker.current_price(self.cfg.symbol)
+            out["quote_raw"] = self._retry(step, lambda: self.broker.current_price(self.cfg.symbol))
             if need_spec:
                 step = "symbol_specification"
-                out["spec_raw"] = self.broker.symbol_specification(self.cfg.symbol)
+                spec = self._cached("_spec_cache", self.cfg.spec_cache_sec)
+                if spec is None:
+                    spec = self._retry(step, lambda: self.broker.symbol_specification(self.cfg.symbol))
+                    self._store("_spec_cache", spec)
+                else:
+                    cache_hits.append(step)
+                out["spec_raw"] = spec
             if need_deals:
                 day_start, day_end = day_window_utc(now, self.zone)
                 out["day_start"], out["day_end"] = day_start, day_end
                 step = "history_deals(today)"
-                out["deals_today"] = self.broker.history_deals(day_start, now + timedelta(minutes=5))
+                out["deals_today"] = self._retry(step, lambda: self.broker.history_deals(day_start, now + timedelta(minutes=5)))
                 step = "history_deals(lookback)"
-                lookback_start = now - timedelta(days=self.cfg.commission_lookback_days)
-                out["deals_lookback"] = self.broker.history_deals(lookback_start, now + timedelta(minutes=5))
+                lookback = self._cached("_lookback_cache", self.cfg.commission_cache_sec)
+                if lookback is None:
+                    lookback_start = now - timedelta(days=self.cfg.commission_lookback_days)
+                    lookback = self._retry(step, lambda: self.broker.history_deals(lookback_start, now + timedelta(minutes=5)))
+                    self._store("_lookback_cache", lookback)
+                else:
+                    cache_hits.append(step)
+                out["deals_lookback"] = lookback
+            out["cache_hits"] = cache_hits
         except BrokerError as exc:
             raise Rejected("READ_FAILED", f"live read failed at {step}: {exc}", step=step)
         except Exception as exc:  # malformed payloads, etc.
@@ -174,11 +243,45 @@ class Executor:
     def status(self) -> Dict[str, Any]:
         """Read-only status for GET /status and the preflight."""
 
-        try:
-            reads = self._read_all(need_spec=True, need_deals=True)
-        except Rejected as exc:
-            return {"ok": False, "code": exc.code, "reason": exc.reason, "config": self.cfg.public_dict()}
-        return {"ok": True, "guards": self.guard_state(reads), "config": self.cfg.public_dict(), "reads": reads}
+        # Snapshot cache for /status ONLY (AUTOEXEC_STATUS_CACHE_SEC). /setup and /tighten
+        # call _read_all directly and always read fresh. Failures are cached for the same
+        # TTL so a poller cannot amplify rate limiting; every failure is logged.
+        ttl = self.cfg.status_cache_sec
+        cached = self._cached("_status_cache", ttl)
+        if cached is not None:
+            reads, error, at = cached["reads"], cached["error"], cached["at"]
+            age = round(self.monotonic_fn() - at, 3)
+        else:
+            error = None
+            reads = None
+            age = 0.0
+            try:
+                reads = self._read_all(need_spec=True, need_deals=True)
+            except Rejected as exc:
+                error = exc
+                self.log.emit("status_read_failed", code=exc.code, reason=exc.reason, step=exc.detail.get("step"), cached_for_sec=ttl, alert=True)
+            if ttl > 0:
+                self._store("_status_cache", {"reads": reads, "error": error, "at": self.monotonic_fn()})
+        if error is not None:
+            return {
+                "ok": False,
+                "code": error.code,
+                "reason": error.reason,
+                "config": self.cfg.public_dict(),
+                "snapshot": {"cached": cached is not None, "age_sec": age, "ttl_sec": ttl},
+            }
+        assert reads is not None
+        # Guard state is recomputed from the snapshot so local inputs (halt file, kill
+        # file, cooldown, cap latch) stay live even while broker reads are cached.
+        live = dict(reads)
+        live["now"] = self._now()
+        return {
+            "ok": True,
+            "guards": self.guard_state(live),
+            "config": self.cfg.public_dict(),
+            "reads": live,
+            "snapshot": {"cached": cached is not None, "age_sec": age, "ttl_sec": ttl, "cache_hits": live.get("cache_hits", [])},
+        }
 
     # ------------------------------------------------------------------ entry
 
@@ -552,14 +655,15 @@ class Executor:
                 return decision
             self.log.emit("order_send", decision_id=decision_id, order=modify)
             try:
-                res = self.broker.trade(modify)
+                # POSITION_MODIFY is idempotent (same SL/TP), so 429/5xx are retried.
+                res = self._retry("trade:POSITION_MODIFY", lambda: self.broker.trade(modify))
             except BrokerError as exc:
                 decision["sent"] = True
                 decision["accepted"] = False
                 decision["code"] = "MODIFY_ERROR"
-                decision["reason"] = f"modify sent but the broker call failed: {exc}"
-                decision["broker_response"] = {"error": str(exc), "status": exc.status}
-                self.log.emit("decision", **self._loggable(decision))
+                decision["reason"] = f"modify failed after retries: {exc}"
+                decision["broker_response"] = {"error": str(exc), "status": exc.status, "retry_after_sec": exc.retry_after}
+                self._tighten_failed(decision)
                 return decision
             decision["sent"] = True
             decision["broker_response"] = res
@@ -567,6 +671,9 @@ class Executor:
             decision["accepted"] = ok
             decision["code"] = "MODIFIED" if ok else "MODIFY_REJECTED"
             decision["reason"] = "stop tightened" if ok else f"broker rejected the modify: {res.get('stringCode')} {res.get('message') or ''}".strip()
+            if not ok:
+                self._tighten_failed(decision)
+                return decision
             self.log.emit("decision", **self._loggable(decision))
             return decision
         except Rejected as exc:
@@ -574,8 +681,27 @@ class Executor:
             decision["reason"] = exc.reason
             if exc.detail:
                 decision["detail"] = exc.detail
-            self.log.emit("decision", **self._loggable(decision))
+            self._tighten_failed(decision)
             return decision
+
+    def _tighten_failed(self, decision: Dict[str, Any]) -> None:
+        """A tighten that did not go through is never silent: decision line + ALERT line."""
+
+        decision["alert"] = True
+        self.log.emit("decision", **self._loggable(decision))
+        self.log.emit(
+            "tighten_failed",
+            alert=True,
+            level="ALERT",
+            decision_id=decision["decision_id"],
+            code=decision.get("code"),
+            reason=decision.get("reason"),
+            mode=decision.get("mode"),
+            sent=decision.get("sent"),
+            request=decision.get("request"),
+            position=decision.get("position"),
+            broker_response=decision.get("broker_response"),
+        )
 
     # ------------------------------------------------------------------ helpers
 
