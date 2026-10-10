@@ -128,8 +128,8 @@ python3 -m autoexec halt-clear --yes       # manual re-enable after an equity ha
 | `AUTOEXEC_COMMISSION_PCT_PER_SIDE_<SYMBOL|CLASS>` | unset | Per-symbol or per-class rate (`_CRYPTO`, `_FOREX`, `_INDEX`, `_METALS`). |
 | `AUTOEXEC_COMMISSION_PER_LOT_ROUNDTRIP_<SYMBOL>` | unset | Flat per-lot round trip for a symbol (selects the `flat` model). |
 | `AUTOEXEC_COMMISSION_PER_LOT_ROUNDTRIP` | `27` | Legacy flat BTCUSD figure (Odin 05:47 ET); used only when BTCUSD resolves to the `flat` model (no asset class from the broker, or `AUTOEXEC_COMMISSION_MODEL_BTCUSD=flat`). |
-| `AUTOEXEC_COMMISSION_MODEL_<SYMBOL|CLASS>` | crypto→`pct` | `pct` or `flat` per symbol or class. Forex/index/metals have **no default**: broker/deals data or an explicit value, else `COMMISSION_UNAVAILABLE`. |
-| `AUTOEXEC_ASSET_CLASS_<SYMBOL>` | unset | Override the class derived from the broker's spec `path` (`crypto|forex|index|metals`). |
+| `AUTOEXEC_COMMISSION_MODEL_<SYMBOL|CLASS>` | per class, see "Confirmed per-asset commission defaults" | `pct` or `flat` per symbol or class. Unknown groups have **no default**: broker/deals data or an explicit value, else `COMMISSION_UNAVAILABLE`. |
+| `AUTOEXEC_ASSET_CLASS_<SYMBOL>` | unset | Override the class derived from the broker's group/name (`crypto|forex|metals|index|oil|equity|energy|dollar_index|agri`). |
 | `AUTOEXEC_COMMISSION_SOURCE` | `auto` | `auto` (spec → deals → env), or pin `spec` / `deals` / `env`. Pinned sources with no data fail closed. |
 | `AUTOEXEC_COMMISSION_LOOKBACK_DAYS` | `30` | Window for the deals-derived commission. |
 | `AUTOEXEC_MAX_POSITIONS_TOTAL` | `2` | Guard 3 (values above 2 are refused). |
@@ -162,8 +162,9 @@ Authorization: Odin 17:07 ET (ETH/SOL) and 19:07 ET (any broker-listed symbol).
   list from MetaAPI (`SYMBOL_NOT_LISTED`; canonical case comes from the list; if the list
   cannot be read the spec read decides and the failure is logged `symbol_list_unavailable`);
   the specification must be readable (`SPEC_UNAVAILABLE`) and expose `contractSize`,
-  `tickSize`, a tick value, `minVolume` and `volumeStep` (`SPEC_INCOMPLETE`, listing the
-  missing fields). No spec value is ever guessed.
+  `tickSize`, `minVolume` and `volumeStep` (`SPEC_INCOMPLETE`, listing the missing fields);
+  a tick value must be derivable (`TICK_VALUE_UNAVAILABLE`, see Guard 2). No spec value is
+  ever guessed.
 - Every per-trade guard is evaluated from **that symbol's own** spec and live quote: $250
   sizing incl. that symbol's spread and round-trip commission, lots floored to its step, skip
   if its minimum lot exceeds $250, MARKET only, SL + TP required, stops only tighten.
@@ -204,13 +205,65 @@ model. Models:
   under `pct`; no FX conversion is attempted). **Default for crypto only** (Trading Ops
   measured FTMO crypto round trips at this rate).
 - `flat`: `AUTOEXEC_COMMISSION_PER_LOT_ROUNDTRIP_<SYMBOL>` per 1.0 lot.
-- Forex, indices and metals have no default model: without broker/deals data or an explicit
-  per-symbol value (or `AUTOEXEC_COMMISSION_MODEL_<CLASS>` + rate) the entry is skipped with
-  `COMMISSION_UNAVAILABLE` naming the variables to set.
-The asset class comes from the broker's spec `path` (`Crypto\…`, `Forex\…`, `Indices\…`,
-`Metals\…`) or `AUTOEXEC_ASSET_CLASS_<SYMBOL>`; the decision reports
-`commission.asset_class`, `commission.model`, `commission.source`, `pct_per_side`,
-`notional_per_lot`.
+- Groups without a confirmed default (see the table below) have no model: without
+  broker/deals data or an explicit per-symbol value (or `AUTOEXEC_COMMISSION_MODEL_<CLASS>` +
+  rate) the entry is skipped with `COMMISSION_UNAVAILABLE` naming the variables to set.
+The decision reports `commission.asset_class`, `commission.model`, `commission.source`,
+`pct_per_side`, `notional_per_lot`.
+
+### Asset-class map (broker group + symbol name)
+
+Case-insensitive on the first segment of the broker's spec `path` (the MT5 group), with
+symbol-name exceptions inside shared groups; slash names (`XAU/USD`) are normalised to
+`XAUUSD`. `AUTOEXEC_ASSET_CLASS_<SYMBOL>` overrides everything.
+
+| Class | Matches |
+|---|---|
+| `crypto` | groups containing `Crypto` — `Crypto`, `Crypto CFD`, `Crypto II CFD` (e.g. UNIUSD) |
+| `forex` | `Forex`, `Exotics`, `FX`, `Currencies` |
+| `metals` | `Metals CFD`, `Metals`, `Gold`, `Silver` |
+| `index` | `Cash CFD` (e.g. US100.cash, US30.cash), `Indices` |
+| `oil` | by name: `USOIL.cash`, `UKOIL.cash` (inside `Cash CFD`) |
+| `energy` | by name: `NATGAS.cash`, `HEATOIL.c` |
+| `dollar_index` | by name: `DXY.cash` |
+| `equity` | `Equities CFD`, `Stocks`, `Shares` |
+| `agri` | `Agricultural`, or any other `*.c` name (COCOA.c, CORN.c, SUGAR.c …) |
+| *(none)* | anything else → no default commission |
+
+### Confirmed per-asset commission defaults
+
+Sources: FTMO official trading updates (Jul–Sep 2025) and FTMO's official symbols data
+(`https://ftmo.com/wp-json/ftmo/symbols`, behind `ftmo.com/en/symbols`, last modified
+2026-10-08 — its figures are round trip, exactly 2× the per-side rates), reconciled with this
+account's broker deals measured by Trading Ops on 2026-10-10 (BTC $27.17/side over 306 round
+trips; FX $2.508/side; US100.cash $0.00 over 2 round trips; no metals deals yet). Decision
+delegated to the implementer by Odin (19:30 ET). Broker/deals-derived values still take
+precedence when available.
+
+| Class | Default | Published / measured |
+|---|---|---|
+| `crypto` | `pct` **0.0325 %/side** (`AUTOEXEC_COMMISSION_PCT_PER_SIDE`) | page 0.065 % round trip; measured $27.17/side |
+| `forex` | `flat` **$5.02** round trip | page $5 round trip ($2.50/side); measured $2.508/side |
+| `metals` | `pct` **0.0007 %/side** | page 0.0014 % round trip; no deals yet — no padded flat guess |
+| `index` | `flat` **$0** | page zero; measured $0.00 on US100.cash |
+| `oil` | `flat` **$0** | page zero (USOIL.cash, UKOIL.cash) |
+| `equity` | `pct` **0.002 %/side** | page 0.004 % round trip |
+| `energy` | `pct` **0.0007 %/side** | page 0.0014 % round trip (NATGAS.cash, HEATOIL.c) |
+| `dollar_index` | `pct` **0.0007 %/side** | page 0.0014 % round trip (DXY.cash) |
+| `agri` | `flat` **$0** | page zero (COCOA.c, CORN.c, SUGAR.c …) |
+| other | none | skip with `COMMISSION_UNAVAILABLE` unless env set |
+
+Per-class overrides: `AUTOEXEC_COMMISSION_MODEL_<CLASS>`, `AUTOEXEC_COMMISSION_PCT_PER_SIDE_<CLASS>`,
+`AUTOEXEC_COMMISSION_PER_LOT_ROUNDTRIP_<CLASS>` (class names as in the table, e.g. `_DOLLAR_INDEX`).
+
+### Env-variable names for symbols with dots
+
+Per-symbol variables accept the exact broker name or an upper-cased form with non-alphanumerics
+replaced by `_`: `AUTOEXEC_COMMISSION_PER_LOT_ROUNDTRIP_US100.cash`,
+`..._US100_CASH` and `..._us100.cash` all address `US100.cash` (systemd `Environment=`
+accepts dots; a POSIX shell does not, so use the underscore form there). A flat commission of
+**`0` is a valid, set value** (e.g. indices), not `COMMISSION_UNAVAILABLE`; only an empty
+value means unset.
 
 **Rate decision (Odin, 2026-10-10 19:30 ET, delegated after Trading Ops' measured data):**
 the crypto `pct` commission is **0.065 % of notional per round trip = 0.0325 % per side**.
@@ -240,14 +293,28 @@ without both.
 
 ### 2. Risk sizing ($250 max incl. costs)
 ```
-value_per_unit = lossTickValue|profitTickValue|tickValue / tickSize   (else contractSize; else fail closed)
+value_per_unit = tick value / tickSize
+   tick value   = quote.lossTickValue (current-price quote; conservative loss side)
+                  else a spec tick value (lossTickValue | profitTickValue | tickValue)
+                  else contractSize x tickSize ONLY if the symbol's profit currency == account currency
+                  else fail closed (TICK_VALUE_UNAVAILABLE)
 stop_distance  = ask - stop  (BUY, fills at ask)   |   stop - bid  (SELL, fills at bid)
 per_lot_loss   = stop_distance * value_per_unit + (ask - bid) * value_per_unit + commission_roundtrip
 lots           = floor_to_step(250 / per_lot_loss, volumeStep), capped at maxVolume
 risk_usd       = lots * per_lot_loss
 ```
 If `lots < minVolume` the entry is skipped (`SKIP_MIN_VOLUME`). Spread, commission (and
-its source), and per-lot loss are logged on every decision, including rejected ones.
+its source), per-lot loss and `value_source` are logged on every decision, including
+rejected ones.
+
+**Tick value source (Trading Ops preflight at b54c805, 2026-10-10):** on this account
+MetaAPI returns `tickValue`/`lossTickValue` as **null in the symbol specification**; tick
+values are only present in the current-price quote (`lossTickValue` / `profitTickValue`).
+Sizing therefore takes `quote.lossTickValue` first, then a spec tick value, then
+`contractSize × tickSize` only for symbols quoted in the account currency (the #84–#86
+behaviour for USD-quoted symbols); otherwise it fails closed. Spec completeness no longer
+requires a tick value in the spec (`contractSize`, `tickSize`, `minVolume`, `volumeStep`
+remain required).
 
 Commission source (`commission_source` in every decision):
 1. `spec` – a commission field on the MetaAPI symbol specification, if the broker exposes one
@@ -406,7 +473,7 @@ hypothetical second entry. The broker object is wrapped so `trade()` cannot be r
 cd btc-advisor-autoexec
 python3 -m pytest tests -q
 ```
-244 tests with a fake MetaAPI broker; no network, no token file. Coverage per mechanic:
+289 tests with a fake MetaAPI broker; no network, no token file. Coverage per mechanic:
 sizing incl. spread + commission and floor to step, skip when min lot > $250, non-market
 rejected, missing SL/TP rejected, max-2 total, every second-position condition (accept
 and reject paths, incl. margin unknown/level/override/spec), tighten-only accept and
@@ -488,10 +555,9 @@ Each is left configurable with a safe default rather than guessed (mirrored in t
     `/home/solveetcoagula/odin_ftmo/config_us100.json` (`metaapi.token`). Confirm both
     (the token must have access to account `a60dfd98-…`).
 13. **Per-asset-class confirmation (Trading Ops, before arming a class):**
-    crypto — the `pct` model at 0.0325 %/side (0.065 % per round trip, Odin 19:30 ET) is the
-    default; confirm the spec `path` says `Crypto`;
-    FX / indices / metals — no default model: set `AUTOEXEC_COMMISSION_PER_LOT_ROUNDTRIP_<SYMBOL>`
-    (or a class model + rate) from the broker's schedule or wait for deals-derived data;
+    commission defaults are confirmed per class (see the table); confirm the broker's group
+    `path` strings match the map (the preflight prints `asset_class.source`), and set a
+    per-symbol value for anything that lands in "other";
     margin — confirm MetaAPI `calculate-margin` works on this account (the preflight prints the
     method), else set `AUTOEXEC_SYMBOL_LEVERAGE_<SYMBOL>` / `AUTOEXEC_MARGIN_PER_LOT_USD_<SYMBOL>`.
 14. **Scope** is account-wide by default (19:07 ET); `AUTOEXEC_SECOND_POSITION_SCOPE=allowed`

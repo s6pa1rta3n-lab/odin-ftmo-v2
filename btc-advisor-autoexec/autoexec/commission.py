@@ -120,7 +120,7 @@ def _model_value(
         return value, "pct", f"model: {pct_per_side}% of notional per side x 2 sides x notional {notional_per_lot.quantize(Decimal('0.01'))}/lot"
     if model == "flat":
         if env_value is None:
-            return None, "none", f"flat model configured for {symbol} but no AUTOEXEC_COMMISSION_PER_LOT_ROUNDTRIP_{env_suffix(symbol)} value is set"
+            return None, "none", f"flat model configured for {symbol} but no AUTOEXEC_COMMISSION_PER_LOT_ROUNDTRIP_{env_suffix(symbol)} value is set (0 is a valid value)"
         return env_value, "env", "model: flat per-lot round trip from env"
     suffix = env_suffix(symbol)
     return None, "none", (

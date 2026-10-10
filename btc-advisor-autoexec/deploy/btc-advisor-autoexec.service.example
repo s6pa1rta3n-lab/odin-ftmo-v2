@@ -39,13 +39,14 @@ Environment=AUTOEXEC_KILL=0
 Environment=AUTOEXEC_MAX_RISK_USD=250
 Environment=AUTOEXEC_DAILY_LOSS_CAP_USD=500
 Environment=AUTOEXEC_EQUITY_HALT_USD=90750
-# Commission models (19:07 ET; rate per Odin 19:30 ET): pct of notional per side for
-# crypto (default 0.0325 = 0.065 % per round trip; measured $54.31/lot RT on ~83.5k),
-# flat per-lot for symbols you set explicitly. FX/indices/metals skip until set.
+# Commission (19:07 ET; crypto rate per Odin 19:30 ET). Confirmed class defaults are built in
+# (FTMO updates Jul-Sep 2025 + ftmo.com/en/symbols 2026-10-08 + measured deals 2026-10-10):
+# crypto pct 0.0325/side, forex flat 5.02 RT, metals pct 0.0007/side, indices/oil/agri flat 0,
+# equities pct 0.002/side, NATGAS/DXY/HEATOIL pct 0.0007/side. Unknown groups skip until set.
 Environment=AUTOEXEC_COMMISSION_PCT_PER_SIDE=0.0325
-Environment=AUTOEXEC_COMMISSION_PER_LOT_ROUNDTRIP=27     # legacy BTCUSD flat fallback
+Environment=AUTOEXEC_COMMISSION_PER_LOT_ROUNDTRIP=27     # legacy BTCUSD flat fallback (no asset class only)
+# Per-symbol overrides accept dotted names: AUTOEXEC_COMMISSION_PER_LOT_ROUNDTRIP_US100.cash=0
 # Environment=AUTOEXEC_COMMISSION_PER_LOT_ROUNDTRIP_XAUUSD=
-# Environment=AUTOEXEC_COMMISSION_PER_LOT_ROUNDTRIP_US100_CASH=
 # Environment=AUTOEXEC_COMMISSION_MODEL_INDEX=            # pct|flat (+ AUTOEXEC_COMMISSION_PCT_PER_SIDE_INDEX)
 Environment=AUTOEXEC_COMMISSION_SOURCE=auto
 Environment=AUTOEXEC_MAX_POSITIONS_TOTAL=2

@@ -21,7 +21,27 @@ DEFAULT_ACCOUNT_ID = "a60dfd98-8a34-4c1b-9f2c-b40cdcc2c3bf"
 DEFAULT_EXPECTED_LOGIN = "541458001"
 DEFAULT_SYMBOL = "BTCUSD"
 DEFAULT_SYMBOLS: Tuple[str, ...] = ()  # empty allowlist = every symbol the broker lists (Odin 2026-10-10 19:07 ET)
-ASSET_CLASSES = ("crypto", "forex", "index", "metals")
+
+# Confirmed per-asset commission defaults (model, value). Sources: FTMO official trading
+# updates Jul–Sep 2025 and FTMO symbols data (https://ftmo.com/wp-json/ftmo/symbols, behind
+# ftmo.com/en/symbols, last modified 2026-10-08; its figures are round trip = 2x per side),
+# reconciled with this account's broker deals measured by Trading Ops on 2026-10-10
+# (BTC $27.17/side over 306 round trips; FX $2.508/side; US100.cash $0.00 over 2 round trips).
+# pct values are % of notional PER SIDE; flat values are per lot per ROUND TRIP.
+# Broker/deals-derived values take precedence when available. Anything not listed has no
+# default and skips with COMMISSION_UNAVAILABLE.
+CLASS_COMMISSION_DEFAULTS: Dict[str, Tuple[str, float]] = {
+    "crypto": ("pct", 0.0325),  # Crypto CFD / Crypto II CFD; page 0.065 % round trip
+    "forex": ("flat", 5.02),  # Forex / Exotics; page $5 round trip, measured $2.508/side
+    "metals": ("pct", 0.0007),  # Metals CFD (XAUUSD, XAGUSD ...); page 0.0014 % round trip; no deals yet
+    "index": ("flat", 0.0),  # Cash CFD indices (US100.cash, US30.cash ...); measured $0.00
+    "oil": ("flat", 0.0),  # USOIL.cash / UKOIL.cash (Cash CFD group)
+    "equity": ("pct", 0.002),  # Equities CFD; page 0.004 % round trip
+    "energy": ("pct", 0.0007),  # NATGAS.cash, HEATOIL.c; page 0.0014 % round trip
+    "dollar_index": ("pct", 0.0007),  # DXY.cash; page 0.0014 % round trip
+    "agri": ("flat", 0.0),  # agricultural .c commodities (COCOA.c, CORN.c, SUGAR.c ...)
+}
+ASSET_CLASSES = tuple(CLASS_COMMISSION_DEFAULTS)
 DEFAULT_COMMENT = "BTC_ADVISOR_AUTO"
 DEFAULT_MAGIC = 20261010
 
@@ -39,7 +59,12 @@ def env_suffix(symbol: str) -> str:
 
 
 def _env_by_suffix(env: Env, prefix: str, *, exclude: Tuple[str, ...] = ()) -> Dict[str, str]:
-    """``{SUFFIX: value}`` for every ``<prefix>_<SUFFIX>`` env var (symbols are open-ended)."""
+    """``{NORMALISED_SUFFIX: value}`` for every ``<prefix>_<suffix>`` env var.
+
+    Suffixes are normalised with :func:`env_suffix`, so ``..._US100.cash`` and
+    ``..._US100_CASH`` (and lower-case variants) all address ``US100.cash``. An empty
+    value means unset; ``0`` is a valid, set value.
+    """
 
     out: Dict[str, str] = {}
     head = prefix + "_"
@@ -49,7 +74,7 @@ def _env_by_suffix(env: Env, prefix: str, *, exclude: Tuple[str, ...] = ()) -> D
         suffix = key[len(head):]
         if not suffix or key in exclude:
             continue
-        out[suffix] = str(raw).strip()
+        out[env_suffix(suffix)] = str(raw).strip()
     return out
 
 
@@ -137,14 +162,12 @@ class Config:
     sample_stop_pct: float = 1.0  # default sample stop distance for /symbol as % of price
 
     # Commission (Odin 19:07 ET): broker/deals-derived when available, else a model per
-    # symbol or asset class. ``pct`` = percentage of notional per side (default 0.0325 %,
-    # i.e. 0.065 % per round trip — Odin's decision 2026-10-10 19:30 ET after Trading Ops
-    # measured $54.31/lot round trip on ~83.5k BTC notional); ``flat`` = per-lot round
-    # trip. The pct model
-    # is the default for crypto only; forex/index/metals need broker/deals data or an
-    # explicit per-symbol value, otherwise the entry skips (COMMISSION_UNAVAILABLE).
-    # The un-suffixed flat fallback (27) is BTCUSD's legacy figure (Odin 05:47 ET) and is
-    # used only when BTCUSD resolves to the flat model.
+    # symbol or asset class (see CLASS_COMMISSION_DEFAULTS). ``pct`` = percentage of
+    # notional per side (crypto default 0.0325 %, i.e. 0.065 % per round trip — Odin's
+    # decision 2026-10-10 19:30 ET after Trading Ops measured $54.31/lot round trip on
+    # ~83.5k BTC notional); ``flat`` = per-lot round trip. Unknown groups have no default
+    # and skip (COMMISSION_UNAVAILABLE). The un-suffixed flat fallback (27) is BTCUSD's
+    # legacy figure (Odin 05:47 ET), used only when BTCUSD resolves to the flat model.
     commission_per_lot_roundtrip: float = 27.0
     commission_per_lot_roundtrip_by_symbol: Dict[str, float] = field(default_factory=dict)  # keyed by env suffix
     commission_pct_per_side: float = 0.0325
@@ -327,7 +350,7 @@ class Config:
         return self._by_symbol(self.asset_class_by_symbol, symbol)
 
     def commission_model_for(self, symbol: str, asset_class: Optional[str]) -> Optional[str]:
-        """Explicit per-symbol model, else the asset-class model (crypto defaults to pct)."""
+        """Explicit per-symbol model, else per-symbol value, else per-class model (env or confirmed default)."""
 
         explicit = self._by_symbol(self.commission_model_by_symbol, symbol)
         if explicit:
@@ -340,21 +363,32 @@ class Config:
             by_class = self.commission_model_by_symbol.get(env_suffix(asset_class))
             if by_class:
                 return by_class
-            if asset_class == "crypto":
-                return "pct"
+            if asset_class in CLASS_COMMISSION_DEFAULTS:
+                return CLASS_COMMISSION_DEFAULTS[asset_class][0]
         if symbol == DEFAULT_SYMBOL and asset_class is None:
             return "flat"  # legacy BTCUSD fallback (Odin 05:47 ET) when the broker gives no asset class
         return None
 
-    def commission_flat_for(self, symbol: str) -> Optional[float]:
+    def commission_flat_for(self, symbol: str, asset_class: Optional[str] = None) -> Optional[float]:
+        """Flat round trip per lot: per-symbol env, else per-class env, else the confirmed class default."""
+
         v = self._by_symbol(self.commission_per_lot_roundtrip_by_symbol, symbol)
         if v is not None:
             return v
+        if asset_class:
+            v = self.commission_per_lot_roundtrip_by_symbol.get(env_suffix(asset_class))
+            if v is not None:
+                return v
+            default = CLASS_COMMISSION_DEFAULTS.get(asset_class)
+            if default and default[0] == "flat":
+                return default[1]
         if symbol == DEFAULT_SYMBOL:
             return self.commission_per_lot_roundtrip
         return None
 
     def commission_pct_for(self, symbol: str, asset_class: Optional[str]) -> float:
+        """Pct per side: per-symbol env, else per-class env, else the confirmed class default, else the global rate."""
+
         v = self._by_symbol(self.commission_pct_per_side_by_symbol, symbol)
         if v is not None:
             return v
@@ -362,6 +396,9 @@ class Config:
             v = self.commission_pct_per_side_by_symbol.get(env_suffix(asset_class))
             if v is not None:
                 return v
+            default = CLASS_COMMISSION_DEFAULTS.get(asset_class)
+            if default and default[0] == "pct" and asset_class != "crypto":
+                return default[1]
         return self.commission_pct_per_side
 
     def commission_env_for(self, symbol: str) -> Optional[float]:

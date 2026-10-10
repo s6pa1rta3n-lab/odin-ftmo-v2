@@ -98,14 +98,21 @@ def test_broker_or_deals_commission_preferred_over_the_model(tmp_path):
 
 # ---------------------------------------------------------------- #4 per-asset model and skip
 
-def test_index_and_forex_skip_without_explicit_commission(tmp_path):
-    ex = _ex(tmp_path)
-    for body in (entry("BUY", symbol="US100.cash", stop=23800, target=24500), entry("BUY", symbol="EURUSD", stop=1.0750, target=1.0900)):
-        d = ex.decide_entry(body)
-        assert d["code"] == "COMMISSION_UNAVAILABLE", d
-        assert d["commission"]["model"] is None and d["commission"]["asset_class"] in ("index", "forex")
-        assert "AUTOEXEC_COMMISSION_PER_LOT_ROUNDTRIP_" in d["reason"]
-    assert ex.broker.trade_calls == []
+def test_index_and_forex_use_confirmed_defaults_unknown_group_skips(tmp_path):
+    # Confirmed defaults (FTMO updates Jul–Sep 2025 + symbols page 2026-10-08 + measured deals):
+    # index flat 0, forex flat 5.02. An unknown group still has no default.
+    ex = _ex(tmp_path, enabled=False)
+    d = ex.decide_entry(entry("BUY", symbol="US100.cash", stop=23800, target=24500))
+    assert d["code"] == "DRY_RUN_WOULD_PLACE" and d["commission"]["asset_class"] == "index" and d["commission_per_lot_roundtrip"] == 0.0
+    d = ex.decide_entry(entry("BUY", symbol="EURUSD", stop=1.0750, target=1.0900))
+    assert d["code"] == "DRY_RUN_WOULD_PLACE" and d["commission"]["asset_class"] == "forex" and d["commission_per_lot_roundtrip"] == 5.02
+    b = any_broker()
+    b.set_symbol("XYZ", spec=dict(SPEC, path="Weird Group\\XYZ", profitCurrency="USD"), quote={"bid": 10.0, "ask": 10.01})
+    ex2 = _ex(tmp_path / "b", b)
+    d = ex2.decide_entry(entry("BUY", symbol="XYZ", stop=9.0, target=12.0))
+    assert d["code"] == "COMMISSION_UNAVAILABLE" and d["commission"]["model"] is None and d["commission"]["asset_class"] is None
+    assert "AUTOEXEC_COMMISSION_PER_LOT_ROUNDTRIP_XYZ" in d["reason"]
+    assert ex2.broker.trade_calls == []
 
 
 def test_metals_flat_per_symbol_value(tmp_path):
@@ -149,7 +156,8 @@ def test_asset_class_from_path_keywords():
     assert asset_class_from_spec({"path": "Forex\\Majors\\EURUSD"}) == "forex"
     assert asset_class_from_spec({"path": "Indices\\US100.cash"}) == "index"
     assert asset_class_from_spec({"path": "Metals\\XAUUSD"}) == "metals"
-    assert asset_class_from_spec({"path": "Stocks\\AAPL"}) is None
+    assert asset_class_from_spec({"path": "Stocks\\AAPL"}) == "equity"
+    assert asset_class_from_spec({"path": "Energies\\USOIL"}) is None  # unknown group (name exceptions handled in asset_class)
     assert asset_class_from_spec({}) is None and asset_class_from_spec(None) is None
 
 
@@ -254,11 +262,13 @@ def test_spec_incomplete_rejected(tmp_path):
     b.set_symbol("BADSPEC", spec={"symbol": "BADSPEC", "path": "Crypto\\X", "contractSize": 1}, quote={"bid": 1, "ask": 1.01})
     ex = _ex(tmp_path, b)
     d = ex.decide_entry(entry("BUY", symbol="BADSPEC", stop=0.9, target=1.5))
-    assert d["code"] == "SPEC_INCOMPLETE" and set(d["detail"]["missing"]) == {"tickSize", "tickValue", "minVolume", "volumeStep"}
+    assert d["code"] == "SPEC_INCOMPLETE" and set(d["detail"]["missing"]) == {"tickSize", "minVolume", "volumeStep"}
     assert b.trade_calls == []
-    b.set_symbol("NOVALUE", spec=dict(SPEC, tickValue=None, lossTickValue=None, profitTickValue=None), quote=QUOTE)
+    # tick value missing everywhere and the symbol not quoted in the account currency -> fail closed with a clear code
+    b.set_symbol("NOVALUE", spec=dict(SPEC, tickValue=None, lossTickValue=None, profitTickValue=None, profitCurrency="EUR"), quote=dict(QUOTE))
     ex.invalidate_caches()  # the broker's symbol list is cached for the spec TTL
-    assert ex.decide_entry(entry("BUY", symbol="NOVALUE"))["code"] == "SPEC_INCOMPLETE"
+    d2 = ex.decide_entry(entry("BUY", symbol="NOVALUE"))
+    assert d2["code"] == "TICK_VALUE_UNAVAILABLE" and "EUR" in d2["reason"]
 
 
 def test_spec_read_failure_after_retries_rejected(tmp_path):
@@ -390,7 +400,7 @@ def test_symbol_endpoint_list_fail_reasons_and_cache(server):
     by = {r.get("symbol"): r for r in body["symbols"]}
     assert by["BTCUSD"]["ok"] and by["BTCUSD"]["commission"]["model"] == "pct"
     assert by["BTCUSD"]["sample"]["stop_pct_of_price"] == pytest.approx(1.0)  # default AUTOEXEC_SAMPLE_STOP_PCT
-    assert by["US100.cash"]["ok"] is False and by["US100.cash"]["reason"].startswith("COMMISSION_UNAVAILABLE")
+    assert by["US100.cash"]["ok"] is True and by["US100.cash"]["commission"]["per_lot_roundtrip"] == 0.0  # confirmed index default
     assert by["NOPE"]["ok"] is False and by["NOPE"]["code"] == "SYMBOL_NOT_LISTED"
     n = len(b.read_calls)
     status, again = _get(srv, "/symbol?symbol=BTCUSD")
@@ -416,7 +426,8 @@ def test_cli_symbol_command(tmp_path, monkeypatch, capsys):
     monkeypatch.setenv("AUTOEXEC_STATE_DIR", str(tmp_path / "cli"))
     monkeypatch.setenv("AUTOEXEC_TOKEN", "SECRET-TOKEN-123")
     monkeypatch.setattr(cli, "MetaApiRest", lambda *a, **k: b)
-    rc = cli.main(["symbol", "UNIUSD", "US100.cash", "--stop-distance", "0.5"])
+    b.set_symbol("XYZ", spec=dict(SPEC, path="Weird Group\\XYZ", profitCurrency="USD"), quote={"bid": 10.0, "ask": 10.01})
+    rc = cli.main(["symbol", "UNIUSD", "XYZ", "--stop-distance", "0.5"])
     out = json.loads(capsys.readouterr().out)
     assert rc == 2 and out["ok"] is False
     assert out["symbols"][0]["ok"] and out["symbols"][0]["sample"]["stop_distance"] == 0.5

@@ -283,6 +283,11 @@ class Executor:
             raise Rejected("READ_FAILED", f"live read failed at {step}: {type(exc).__name__}: {exc}", step=step)
         return out
 
+    def _parse_spec(self, spec_raw: Dict[str, Any], quote_raw: Optional[Dict[str, Any]], account: Optional[Dict[str, Any]], *, strict: bool = False):
+        """parse_spec with the tick value taken from the quote (this account's spec reports null tick values)."""
+
+        return parse_spec(spec_raw, strict=strict, quote=quote_raw, account_currency=str((account or {}).get("currency") or ""))
+
     def _notional_per_lot(self, spec_raw: Dict[str, Any], fill_price: Decimal, account: Dict[str, Any]) -> Tuple[Optional[Decimal], str]:
         """contractSize x price when the symbol's profit currency is the account currency; else (None, why)."""
 
@@ -309,7 +314,7 @@ class Executor:
     ):
         cls_name, cls_source = classify_asset(symbol, spec_raw, self.cfg.asset_class_override(symbol))
         model = self.cfg.commission_model_for(symbol, cls_name)
-        flat = self.cfg.commission_flat_for(symbol)
+        flat = self.cfg.commission_flat_for(symbol, cls_name)
         notional: Optional[Decimal] = None
         notional_note = "no price"
         if spec_raw is not None and fill_price is not None:
@@ -388,7 +393,7 @@ class Executor:
             missing = missing_spec_fields(spec_raw)
             view["spec_missing"] = missing
             try:
-                spec = parse_spec(spec_raw, strict=True)
+                spec = self._parse_spec(spec_raw, quote_raw, account, strict=True)
                 view["spec"] = spec.as_dict()
             except SizingError as exc:
                 view["spec"] = {"error": str(exc)}
@@ -568,7 +573,7 @@ class Executor:
                 state["quote"] = {"error": exc.reason}
         if "spec_raw" in reads:
             try:
-                state["spec"] = parse_spec(reads["spec_raw"]).as_dict()
+                state["spec"] = self._parse_spec(reads["spec_raw"], reads.get("quote_raw"), account).as_dict()
             except SizingError as exc:
                 state["spec"] = {"error": str(exc)}
             state["commission"] = self._commission_for(symbol, reads.get("spec_raw"), reads.get("deals_lookback")).as_dict()
@@ -728,7 +733,11 @@ class Executor:
             # #1 levels, #2 sizing incl. spread + commission
             quote = guards.parse_quote(reads["quote_raw"])
             stop_distance = guards.check_levels(setup, quote)
-            spec = parse_spec(reads["spec_raw"], strict=True)
+            try:
+                spec = self._parse_spec(reads["spec_raw"], reads["quote_raw"], reads["account"], strict=True)
+            except SizingError as exc:
+                raise Rejected("TICK_VALUE_UNAVAILABLE", f"cannot value {symbol}: {exc}", symbol=symbol)
+            decision["value_source"] = spec.value_source
             fill_price = quote.ask if setup.side == "BUY" else quote.bid
             comm = self._commission_for(symbol, reads["spec_raw"], reads.get("deals_lookback"), fill_price=fill_price, account=reads["account"])
             decision["commission"] = comm.as_dict()
@@ -875,13 +884,17 @@ class Executor:
             if sym in values:
                 continue
             spec_raw = reads["specs"].get(sym)
+            quote_raw = reads["quotes"].get(sym)
             try:
                 if spec_raw is None:
                     spec_raw = self._spec_for(sym, reads.get("cache_hits"))
                     reads["specs"][sym] = spec_raw
-                values[sym] = parse_spec(spec_raw).value_per_unit_per_lot  # lenient: only the value per unit is needed
+                if quote_raw is None:
+                    quote_raw = self._quote_for(sym)  # tick value lives in the quote on this account
+                    reads["quotes"][sym] = quote_raw
+                values[sym] = self._parse_spec(spec_raw, quote_raw, reads["account"]).value_per_unit_per_lot  # lenient: only the value per unit is needed
             except BrokerError as exc:
-                raise Rejected("READ_FAILED", f"live read failed at symbol_specification({sym}): {exc}", step=f"symbol_specification({sym})")
+                raise Rejected("READ_FAILED", f"live read failed at symbol_specification/current_price({sym}): {exc}", step=f"symbol_specification({sym})")
             except SizingError as exc:
                 raise Rejected("SECOND_SPEC_UNAVAILABLE", f"cannot value the open {sym} position at its stop: {exc}", symbol=sym)
         existing = [second.existing_position_risk(p, values[str(p.get("symbol") or "")]) for p in existing_positions]
@@ -971,7 +984,7 @@ class Executor:
             setup = guards.parse_setup(payload)
             quote = guards.parse_quote(reads["quote_raw"])
             stop_distance = guards.check_levels(setup, quote)
-            spec = parse_spec(reads["spec_raw"])
+            spec = self._parse_spec(reads["spec_raw"], reads.get("quote_raw"), reads.get("account"))
             fill_price = quote.ask if setup.side == "BUY" else quote.bid
             comm = self._commission_for(symbol, reads["spec_raw"], reads.get("deals_lookback"), fill_price=fill_price, account=reads.get("account"))
             decision.setdefault("commission", comm.as_dict())

@@ -8,11 +8,11 @@ lots = floor_to_step(max_risk / per_lot_loss)
 
 If even ``minVolume`` would lose more than ``max_risk``, the entry is skipped.
 
-``value_per_price_unit_per_lot`` comes from the MetaAPI symbol specification:
-``tickValue / tickSize`` when both are present (``lossTickValue`` is preferred
-over ``profitTickValue`` over ``tickValue`` because sizing is about the losing
-side), else ``contractSize`` for a USD-quoted symbol. No hard-coded fallback:
-if the spec exposes neither, sizing fails closed.
+``value_per_price_unit_per_lot`` = tick value / ``tickSize``. The tick value
+comes from the current-price quote's ``lossTickValue`` (this account's MetaAPI
+reports null tick values in the spec), else a spec tick value, else
+``contractSize x tickSize`` only for symbols quoted in the account currency.
+No hard-coded fallback: otherwise sizing fails closed.
 
 All arithmetic is in ``Decimal`` to make the floor-to-step exact.
 """
@@ -63,27 +63,45 @@ def _opt(spec: Dict[str, Any], key: str) -> Optional[Decimal]:
     return d
 
 
-REQUIRED_SPEC_FIELDS = ("contractSize", "tickSize", "tickValue", "minVolume", "volumeStep")
+REQUIRED_SPEC_FIELDS = ("contractSize", "tickSize", "minVolume", "volumeStep")
 
 
 def missing_spec_fields(spec: Dict[str, Any]) -> List[str]:
-    """Fields a tradable symbol must expose (Odin 2026-10-10 19:07 ET: never guess a spec value).
+    """Spec fields a tradable symbol must expose (Odin 2026-10-10 19:07 ET: never guess a spec value).
 
-    ``tickValue`` is satisfied by any of lossTickValue / profitTickValue / tickValue.
+    The tick value is NOT required in the spec: on this account MetaAPI reports
+    ``tickValue``/``lossTickValue`` as null in the specification and only in the
+    current-price quote (Trading Ops preflight, 2026-10-10). See :func:`parse_spec`.
     """
 
     missing: List[str] = []
-    for key in ("contractSize", "tickSize", "minVolume", "volumeStep"):
+    for key in REQUIRED_SPEC_FIELDS:
         v = _opt(spec, key)
         if v is None or v <= 0:
             missing.append(key)
-    if not any((_opt(spec, k) or Decimal("0")) > 0 for k in ("lossTickValue", "profitTickValue", "tickValue")):
-        missing.append("tickValue")
     return missing
 
 
-def parse_spec(spec: Dict[str, Any], *, strict: bool = False) -> SpecValues:
+def _symbol_currency(spec: Dict[str, Any]) -> str:
+    return str(spec.get("profitCurrency") or spec.get("quoteCurrency") or "")
+
+
+def parse_spec(
+    spec: Dict[str, Any],
+    *,
+    strict: bool = False,
+    quote: Optional[Dict[str, Any]] = None,
+    account_currency: Optional[str] = None,
+) -> SpecValues:
     """Extract the fields sizing needs and derive $/price-unit/lot.
+
+    Tick value source, in order (``value_source`` records which one was used):
+
+    1. ``quote.lossTickValue`` from the current-price quote (conservative, loss side).
+    2. a spec tick value (``lossTickValue`` / ``profitTickValue`` / ``tickValue``).
+    3. ``contractSize x tickSize`` — ONLY when the symbol's profit/quote currency equals
+       the account currency (this is the #84–#86 behaviour for USD-quoted symbols).
+    Otherwise the symbol fails closed (``SizingError``).
 
     ``strict=True`` additionally requires every field in ``REQUIRED_SPEC_FIELDS``.
     """
@@ -94,13 +112,6 @@ def parse_spec(spec: Dict[str, Any], *, strict: bool = False) -> SpecValues:
             raise SizingError(f"symbol specification is missing {missing}")
 
     tick_size = _opt(spec, "tickSize")
-    tick_value: Optional[Decimal] = None
-    tick_value_field: Optional[str] = None
-    for key in ("lossTickValue", "profitTickValue", "tickValue"):
-        tv = _opt(spec, key)
-        if tv is not None and tv > 0:
-            tick_value, tick_value_field = tv, key
-            break
     contract_size = _opt(spec, "contractSize")
     volume_step = _opt(spec, "volumeStep")
     min_volume = _opt(spec, "minVolume")
@@ -112,15 +123,37 @@ def parse_spec(spec: Dict[str, Any], *, strict: bool = False) -> SpecValues:
         raise SizingError("symbol specification missing volumeStep")
     if min_volume is None or min_volume <= 0:
         raise SizingError("symbol specification missing minVolume")
+    if tick_size is None or tick_size <= 0:
+        raise SizingError("symbol specification missing tickSize")
 
-    if tick_size is not None and tick_size > 0 and tick_value is not None and tick_value > 0:
-        value = tick_value / tick_size
-        source = f"{tick_value_field}/tickSize"
-    elif contract_size is not None and contract_size > 0:
-        value = contract_size
-        source = "contractSize"
+    tick_value: Optional[Decimal] = None
+    tick_value_field: Optional[str] = None
+    source: Optional[str] = None
+    q_loss = _opt(quote or {}, "lossTickValue")
+    if q_loss is not None and q_loss > 0:
+        tick_value, tick_value_field, source = q_loss, "quote.lossTickValue", "quote.lossTickValue/tickSize"
     else:
-        raise SizingError("symbol specification exposes neither tickValue/tickSize nor contractSize")
+        for key in ("lossTickValue", "profitTickValue", "tickValue"):
+            tv = _opt(spec, key)
+            if tv is not None and tv > 0:
+                tick_value, tick_value_field, source = tv, f"spec.{key}", f"spec.{key}/tickSize"
+                break
+    if tick_value is not None:
+        value = tick_value / tick_size
+    else:
+        sym_ccy = _symbol_currency(spec)
+        acct_ccy = str(account_currency or "")
+        if contract_size is not None and contract_size > 0 and sym_ccy and acct_ccy and sym_ccy == acct_ccy:
+            tick_value = contract_size * tick_size
+            tick_value_field = "contractSize x tickSize"
+            source = f"contractSize x tickSize ({sym_ccy}-quoted, account {acct_ccy})"
+            value = contract_size
+        else:
+            why = "profit currency not reported" if not sym_ccy else (f"profit currency {sym_ccy} != account currency {acct_ccy or '?'}")
+            raise SizingError(
+                "no tick value: quote.lossTickValue and spec tickValue are absent, and contractSize x tickSize "
+                f"is only used when the symbol is quoted in the account currency ({why})"
+            )
     if value <= 0:
         raise SizingError(f"derived value per price unit is not positive ({value})")
     return SpecValues(
@@ -133,7 +166,7 @@ def parse_spec(spec: Dict[str, Any], *, strict: bool = False) -> SpecValues:
         max_volume=max_volume,
         digits=digits,
         value_per_unit_per_lot=value,
-        value_source=source,
+        value_source=source or "unknown",
     )
 
 
