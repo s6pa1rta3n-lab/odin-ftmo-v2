@@ -349,10 +349,14 @@ def test_breakeven_required_on_every_position_account_wide(tmp_path):
     assert d3["code"] in ("READ_FAILED", "SECOND_SPEC_UNAVAILABLE")
 
 
-def test_scope_allowed_still_available_as_opt_out(tmp_path):
+def test_scope_opt_out_is_ignored_account_wide_always(tmp_path):
+    # Odin 2026-10-10 19:07 ET: account-wide. A stale AUTOEXEC_SECOND_POSITION_SCOPE=allowed drop-in must not narrow it.
     pos = [position("G", symbol="XAUUSD", magic=4242, comment="GRIFF_GOLD", open_price=4300.0, stop_loss=4290.0)]
     ex = _ex(tmp_path, any_broker(positions=pos), env={"AUTOEXEC_SECOND_POSITION_SCOPE": "allowed", "AUTOEXEC_SYMBOLS": "BTCUSD,UNIUSD"})
-    assert ex.decide_entry(entry("BUY"))["code"] == "PLACED"
+    d = ex.decide_entry(entry("BUY"))
+    assert d["code"] == "SECOND_SL_NOT_BREAKEVEN" and d["guards"]["second_position_scope"] == "all"
+    assert d["guards"]["second_position_scope_requested"] == "allowed"
+    assert [r for r in ex.log.records if r["event"] == "scope_override_ignored" and r["alert"] is True]
 
 
 # ---------------------------------------------------------------- #6 /symbol

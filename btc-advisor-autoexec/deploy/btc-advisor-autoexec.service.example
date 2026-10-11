@@ -52,7 +52,7 @@ Environment=AUTOEXEC_COMMISSION_SOURCE=auto
 Environment=AUTOEXEC_MAX_POSITIONS_TOTAL=2
 Environment=AUTOEXEC_SECOND_POSITION_MIN_RR=2.0
 Environment=AUTOEXEC_MIN_MARGIN_LEVEL_PCT=200
-Environment=AUTOEXEC_SECOND_POSITION_SCOPE=all
+# Position limit and breakeven are always account-wide (Odin 19:07 ET); no scope knob.
 # Margin cap on every entry (19:07 ET): MetaAPI calculate-margin first; calibration
 # fallbacks per symbol if the broker calc is unavailable (entries skip until one exists).
 Environment=AUTOEXEC_MARGIN_CALC_BROKER=1

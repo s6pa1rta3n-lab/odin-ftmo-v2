@@ -117,7 +117,7 @@ python3 -m autoexec halt-clear --yes       # manual re-enable after an equity ha
 | `AUTOEXEC_SYMBOLS` | *(empty)* | Optional **allowlist**. Empty = every symbol the broker lists. |
 | `AUTOEXEC_SYMBOLS_DENY` | *(empty)* | Optional denylist. |
 | `AUTOEXEC_STATUS_SYMBOLS` | *(empty)* | Extra symbols to report in `/status` (default symbol, allowlist and open-position symbols are always included). |
-| `AUTOEXEC_SECOND_POSITION_SCOPE` | `all` | `all` = every open position on the account counts (Odin 19:07 ET); `allowed` = allowlist symbols only. |
+| `AUTOEXEC_SECOND_POSITION_SCOPE` | `all` | Accepted for backward compatibility only. The position limit and the breakeven rule are **always account-wide** (Odin 19:07 ET); any other value is ignored and logged `scope_override_ignored` (alert). |
 | `AUTOEXEC_SAMPLE_STOP_PCT` | `1.0` | Default sample stop distance for `/symbol` / preflight, as % of price. |
 | `AUTOEXEC_CLIENT_HOST` | `https://mt-client-api-v1.london.agiliumtrade.ai` | MetaAPI client REST host. |
 | `AUTOEXEC_ORDERS_ENABLED` | `0` | **Arming flag.** `1` allows `/trade` calls. |
@@ -326,8 +326,9 @@ Commission source (`commission_source` in every decision):
 
 ### 3. Position count and the second-position rule
 **Every open position on the account counts** — all symbols, manual (magic 0), auto and
-other engines (e.g. the gold engine's XAUUSD) — with `AUTOEXEC_SECOND_POSITION_SCOPE=all`
-(default since 19:07 ET; `allowed` restricts to the allowlist).
+other engines (e.g. the gold engine's XAUUSD). This is unconditional since the
+`6c07d0f` safety check: the env allowlist restricts what can be *traded*, never what is
+*counted*, and `AUTOEXEC_SECOND_POSITION_SCOPE` cannot narrow it.
 
 - 0 open: normal single-entry guards.
 - ≥ `AUTOEXEC_MAX_POSITIONS_TOTAL` (2) open: `MAX_POSITIONS`.
@@ -428,6 +429,12 @@ read failure after retries, modify error after retries, broker rejection, or a g
 rejection. The decision JSON of a failed tighten also carries `alert: true` and a clear
 `code` (`READ_FAILED`, `MODIFY_ERROR`, `MODIFY_REJECTED`, `SL_NOT_TIGHTER`, …).
 
+`/status.guards.positions` lists **every open position on the account** (all symbols):
+`id, symbol, side, volume, open_price, stop_loss, take_profit, magic, comment, kind
+(auto|manual|other), breakeven_or_better, profit, commission, swap, floating_pnl, open_time`;
+`book` keeps the grouped view and `open_by_symbol` the counts. This is reporting only; it
+does not change any decision.
+
 `/status` responses include `snapshot: {cached, age_sec, ttl_sec, cache_hits}`. Local
 inputs (HALT file, KILL file, cooldown, daily-cap latch) are recomputed on every call
 even when the broker snapshot is cached. Live calls per `/status`: 6 on the first call,
@@ -473,7 +480,7 @@ hypothetical second entry. The broker object is wrapped so `trade()` cannot be r
 cd btc-advisor-autoexec
 python3 -m pytest tests -q
 ```
-289 tests with a fake MetaAPI broker; no network, no token file. Coverage per mechanic:
+306 tests with a fake MetaAPI broker; no network, no token file. Coverage per mechanic:
 sizing incl. spread + commission and floor to step, skip when min lot > $250, non-market
 rejected, missing SL/TP rejected, max-2 total, every second-position condition (accept
 and reject paths, incl. margin unknown/level/override/spec), tighten-only accept and
@@ -560,7 +567,8 @@ Each is left configurable with a safe default rather than guessed (mirrored in t
     per-symbol value for anything that lands in "other";
     margin — confirm MetaAPI `calculate-margin` works on this account (the preflight prints the
     method), else set `AUTOEXEC_SYMBOL_LEVERAGE_<SYMBOL>` / `AUTOEXEC_MARGIN_PER_LOT_USD_<SYMBOL>`.
-14. **Scope** is account-wide by default (19:07 ET); `AUTOEXEC_SECOND_POSITION_SCOPE=allowed`
-    is the opt-out.
+14. **Scope** is account-wide, unconditionally (19:07 ET); the former `allowed` opt-out was
+    removed after the 6c07d0f safety check because a stale drop-in could have narrowed the
+    position limit and breakeven rule to a subset of symbols.
 15. **Order comment** stays `BTC_ADVISOR_AUTO` on every symbol (the magic is the identity).
     Confirm or set `AUTOEXEC_COMMENT`.
