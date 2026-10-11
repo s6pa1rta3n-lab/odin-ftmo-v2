@@ -226,16 +226,17 @@ def test_positions_on_any_symbol_count_by_default(tmp_path):
     assert d["code"] == "MAX_POSITIONS" and d["guards"]["total_open"] == 2
 
 
-def test_scope_allowed_restricts_to_the_allowlist(tmp_path):
+def test_scope_is_account_wide_even_with_an_allowlist(tmp_path):
     positions = [position("X", symbol="XAUUSD", magic=0, comment="", open_price=4400.0, stop_loss=4300.0)]
     ex = _ex(tmp_path, multi_broker(positions=positions), env={"AUTOEXEC_SECOND_POSITION_SCOPE": "all"})
     d = ex.decide_entry(eth_entry())
     assert d["code"] == "SECOND_SL_NOT_BREAKEVEN" and d["guards"]["total_open"] == 1
     # the XAUUSD spec was fetched to value that position (same fake spec here)
     assert ex.broker.read_calls.count("symbol_specification") >= 2
+    # an allowlist restricts what can be TRADED, never what is COUNTED (Odin 19:07 ET)
     ex2 = _ex(tmp_path / "b", multi_broker(positions=positions), env={"AUTOEXEC_SECOND_POSITION_SCOPE": "allowed", "AUTOEXEC_SYMBOLS": "BTCUSD,ETHUSD,SOLUSD"})
     d2 = ex2.decide_entry(eth_entry())
-    assert d2["code"] == "PLACED" and d2["guards"]["total_open"] == 0
+    assert d2["code"] == "SECOND_SL_NOT_BREAKEVEN" and d2["guards"]["total_open"] == 1
 
 
 # ---------------------------------------------------------------- cross-symbol second-position conditions

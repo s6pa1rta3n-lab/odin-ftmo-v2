@@ -68,6 +68,14 @@ class Executor:
             max_sec=cfg.retry_max_sec,
         )
         self.retry_policy.validate()
+        if self.cfg.second_position_scope_requested != "all":
+            self.log.emit(
+                "scope_override_ignored",
+                alert=True,
+                requested=self.cfg.second_position_scope_requested,
+                effective="all",
+                reason="position limit and breakeven are account-wide (Odin 2026-10-10 19:07 ET); AUTOEXEC_SECOND_POSITION_SCOPE cannot narrow them",
+            )
         # In-memory caches (never persisted; the state-file format is unchanged).
         self._cache_lock = threading.Lock()
         self._spec_cache: Dict[str, Tuple[float, Dict[str, Any]]] = {}  # per symbol
@@ -208,13 +216,51 @@ class Executor:
             raise Rejected("SPEC_INCOMPLETE", f"specification for {canonical!r} lacks {missing}; refusing to guess", missing=missing)
         return canonical, spec_raw
 
-    def _scope_symbols(self) -> Optional[List[str]]:
-        """Symbols whose positions count for the position limit / second-position rule (None = all)."""
-
-        return None if self.cfg.second_position_scope == "all" else list(self.cfg.symbols)
-
     def _book(self, positions: List[Dict[str, Any]]) -> guards.Book:
-        return guards.classify_positions(positions, symbols=self._scope_symbols(), magic=self.cfg.magic, comment=self.cfg.comment)
+        """Every open position on the account, all symbols (position limit, breakeven, /status).
+
+        Account-wide by construction (Odin 2026-10-10 19:07 ET): no symbol filter is applied,
+        whatever the env says.
+        """
+
+        return guards.classify_positions(positions, symbols=None, symbol=None, magic=self.cfg.magic, comment=self.cfg.comment)
+
+    def _positions_report(self, book: guards.Book) -> List[Dict[str, Any]]:
+        """Flat list of every open position for /status (no decision logic)."""
+
+        out: List[Dict[str, Any]] = []
+        for kind in ("auto", "manual", "other"):
+            for p in getattr(book, kind):
+                side = second.position_side(p)
+                risk = second.existing_position_risk(p, Decimal("1"))  # value per unit only affects risk $, not the breakeven flag
+                floating = Decimal("0")
+                for key in ("profit", "commission", "swap"):
+                    v = p.get(key)
+                    try:
+                        floating += D(v) if v not in (None, "") else Decimal("0")
+                    except Exception:
+                        pass
+                out.append(
+                    {
+                        "id": p.get("id"),
+                        "symbol": p.get("symbol"),
+                        "side": side,
+                        "volume": p.get("volume"),
+                        "open_price": p.get("openPrice"),
+                        "stop_loss": p.get("stopLoss"),
+                        "take_profit": p.get("takeProfit"),
+                        "magic": p.get("magic"),
+                        "comment": guards._comment(p),
+                        "kind": kind,  # auto (this trader), manual (magic 0), other (another engine)
+                        "breakeven_or_better": risk.breakeven_or_better,
+                        "profit": p.get("profit"),
+                        "commission": p.get("commission"),
+                        "swap": p.get("swap"),
+                        "floating_pnl": float(floating),
+                        "open_time": p.get("time") or p.get("openTime"),
+                    }
+                )
+        return out
 
     @property
     def armed(self) -> bool:
@@ -534,7 +580,8 @@ class Executor:
             "symbol": symbol,
             "symbols": list(self.cfg.symbols),
             "symbols_deny": list(self.cfg.symbols_deny),
-            "second_position_scope": self.cfg.second_position_scope,
+            "second_position_scope": "all",
+            "second_position_scope_requested": self.cfg.second_position_scope_requested,
             "trading_day": today,
             "day_tz": self.cfg.day_tz,
             "login": account.get("login"),
@@ -550,6 +597,7 @@ class Executor:
             "manual_open": len(book.manual),
             "other_magic_open": len(book.other),
             "total_open": len(guards.all_symbol_positions(book)),
+            "positions": self._positions_report(book),  # every open position on the account, all symbols
             "open_by_symbol": per_symbol_open,
             "auto_open_all_symbols": len(auto_all),
             "max_positions_total": self.cfg.max_positions_total,
@@ -909,7 +957,7 @@ class Executor:
         )
         info = {
             "symbol": symbol,
-            "scope": self.cfg.second_position_scope,
+            "scope": "all",
             "existing": [e.as_dict() for e in existing],
             "new_risk_usd": float(sizing.risk_usd),
             "combined_open_risk_usd": float(combined),

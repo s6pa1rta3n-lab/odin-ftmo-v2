@@ -158,7 +158,12 @@ class Config:
     symbol_leverage_by_symbol: Dict[str, float] = field(default_factory=dict)  # keyed by env suffix
     margin_use_account_leverage: bool = False
     margin_calc_broker: bool = True  # prefer MetaAPI calculate-margin (broker-reported) for the margin estimate
-    second_position_scope: str = "all"  # all (account-wide, Odin 19:07 ET) | allowed (allowlist symbols only)
+    # Position limit / breakeven scope is ALWAYS account-wide (Odin 2026-10-10 19:07 ET).
+    # AUTOEXEC_SECOND_POSITION_SCOPE is accepted for backward compatibility only; any value
+    # other than "all" is ignored and logged (scope_override_ignored) so a stale drop-in can
+    # never narrow the safety view to a subset of symbols.
+    second_position_scope: str = "all"
+    second_position_scope_requested: str = "all"
     sample_stop_pct: float = 1.0  # default sample stop distance for /symbol as % of price
 
     # Commission (Odin 19:07 ET): broker/deals-derived when available, else a model per
@@ -239,7 +244,8 @@ class Config:
             symbol_leverage_by_symbol=_env_by_suffix_float(e, "AUTOEXEC_SYMBOL_LEVERAGE"),
             margin_use_account_leverage=_env_bool(e, "AUTOEXEC_MARGIN_USE_ACCOUNT_LEVERAGE", False),
             margin_calc_broker=_env_bool(e, "AUTOEXEC_MARGIN_CALC_BROKER", True),
-            second_position_scope=_env_str(e, "AUTOEXEC_SECOND_POSITION_SCOPE", "all").lower(),
+            second_position_scope="all",
+            second_position_scope_requested=_env_str(e, "AUTOEXEC_SECOND_POSITION_SCOPE", "all").lower(),
             sample_stop_pct=_env_float(e, "AUTOEXEC_SAMPLE_STOP_PCT", 1.0),
             commission_per_lot_roundtrip=_env_float(e, "AUTOEXEC_COMMISSION_PER_LOT_ROUNDTRIP", 27.0),
             commission_per_lot_roundtrip_by_symbol=_env_by_suffix_float(e, "AUTOEXEC_COMMISSION_PER_LOT_ROUNDTRIP"),
@@ -276,8 +282,8 @@ class Config:
             raise ValueError(f"AUTOEXEC_SYMBOL {self.symbol!r} must be in the AUTOEXEC_SYMBOLS allowlist {list(self.symbols)}")
         if self.symbol in self.symbols_deny:
             raise ValueError(f"AUTOEXEC_SYMBOL {self.symbol!r} is in AUTOEXEC_SYMBOLS_DENY")
-        if self.second_position_scope not in {"allowed", "all"}:
-            raise ValueError("AUTOEXEC_SECOND_POSITION_SCOPE must be all|allowed")
+        if self.second_position_scope != "all":
+            raise ValueError("second_position_scope is always 'all' (account-wide, Odin 2026-10-10 19:07 ET)")
         for suffix, model in self.commission_model_by_symbol.items():
             if model not in {"pct", "flat"}:
                 raise ValueError(f"AUTOEXEC_COMMISSION_MODEL_{suffix} must be pct|flat, got {model!r}")
